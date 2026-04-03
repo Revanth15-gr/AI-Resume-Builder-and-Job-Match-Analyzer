@@ -1,0 +1,98 @@
+import { Router } from 'express'
+import Resume from '../models/Resume.js'
+import Job from '../models/Job.js'
+import { protect } from '../middleware/auth.js'
+
+const router = Router()
+
+// GET /api/analytics/dashboard — dashboard summary
+router.get('/dashboard', protect, async (req, res) => {
+  try {
+    const userId = req.user._id
+
+    // Get latest resume ATS score
+    const latestResume = await Resume.findOne({ user: userId }).sort('-updatedAt')
+    const resumeScore = latestResume?.atsScore?.overall || 0
+
+    // Get job stats
+    const jobStats = await Job.aggregate([
+      { $match: { user: userId } },
+      { $group: { _id: '$stage', count: { $sum: 1 } } },
+    ])
+
+    const jobs = { saved: 0, applied: 0, interview: 0, offer: 0, rejected: 0 }
+    jobStats.forEach(s => { jobs[s._id] = s.count })
+    const totalJobs = Object.values(jobs).reduce((a, b) => a + b, 0)
+
+    // Top matches
+    const topMatches = await Job.find({ user: userId, matchScore: { $gt: 0 } })
+      .sort('-matchScore')
+      .limit(5)
+      .select('title company matchScore')
+
+    // Resume count  
+    const resumeCount = await Resume.countDocuments({ user: userId })
+
+    res.json({
+      success: true,
+      dashboard: {
+        resumeScore,
+        jobMatches: totalJobs,
+        applications: jobs.applied + jobs.interview + jobs.offer,
+        interviews: jobs.interview,
+        offers: jobs.offer,
+        resumeCount,
+        topMatches,
+        stageBreakdown: jobs,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// GET /api/analytics/score-history — ATS score over time (mock + real)
+router.get('/score-history', protect, async (req, res) => {
+  try {
+    // In production, you'd store score history in a separate collection
+    // For now, generate a realistic trend based on current score
+    const latestResume = await Resume.findOne({ user: req.user._id }).sort('-updatedAt')
+    const currentScore = latestResume?.atsScore?.overall || 75
+
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    const history = days.map((day, i) => ({
+      day,
+      score: Math.max(50, Math.min(100, currentScore - (6 - i) * 3 + Math.floor(Math.random() * 5))),
+    }))
+
+    res.json({ success: true, history })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+// GET /api/analytics/skill-gaps — skill gap analysis
+router.get('/skill-gaps', protect, async (req, res) => {
+  try {
+    const jobs = await Job.find({ user: req.user._id, missingSkills: { $exists: true, $ne: [] } })
+    
+    // Aggregate missing skills across all tracked jobs
+    const skillCount = {}
+    jobs.forEach(job => {
+      job.missingSkills.forEach(skill => {
+        skillCount[skill] = (skillCount[skill] || 0) + 1
+      })
+    })
+
+    const gaps = Object.entries(skillCount)
+      .map(([skill, count]) => ({ skill, frequency: count, importance: count > 3 ? 'high' : count > 1 ? 'medium' : 'low' }))
+      .sort((a, b) => b.frequency - a.frequency)
+      .slice(0, 10)
+
+    res.json({ success: true, gaps })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
+export default router
