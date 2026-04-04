@@ -1,4 +1,5 @@
-const API_BASE = '/api'
+const API_ROOT = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api'
 
 class ApiClient {
   constructor() {
@@ -20,17 +21,29 @@ class ApiClient {
     return headers
   }
 
+  buildUrl(path) {
+    if (!path.startsWith('/')) {
+      throw new Error('API path must start with /')
+    }
+    return `${API_ROOT}${API_PREFIX}${path}`
+  }
+
   async request(method, path, body = null) {
     const opts = { method, headers: this.getHeaders() }
     if (body) opts.body = JSON.stringify(body)
 
-    const res = await fetch(`${API_BASE}${path}`, opts)
-    const data = await res.json()
+    const res = await fetch(this.buildUrl(path), opts)
+    const isJson = (res.headers.get('content-type') || '').includes('application/json')
+    const data = isJson ? await res.json() : null
 
     if (!res.ok) {
-      throw new Error(data.message || `Request failed: ${res.status}`)
+      const message = data?.message || data?.error?.message || `Request failed: ${res.status}`
+      const error = new Error(message)
+      error.status = res.status
+      throw error
     }
-    return data
+
+    return data || { success: true }
   }
 
   // ─── Auth ───
@@ -42,6 +55,11 @@ class ApiClient {
 
   // ─── Resumes ───
   getResumes() { return this.request('GET', '/resumes') }
+  async getLatestResume() {
+    const response = await this.getResumes()
+    const resume = Array.isArray(response?.resumes) && response.resumes.length ? response.resumes[0] : null
+    return { ...response, resume }
+  }
   getResume(id) { return this.request('GET', `/resumes/${id}`) }
   createResume(data) { return this.request('POST', '/resumes', data) }
   updateResume(id, data) { return this.request('PUT', `/resumes/${id}`, data) }
@@ -49,6 +67,9 @@ class ApiClient {
   generateResume(id) { return this.request('POST', `/resumes/${id}/generate`) }
   scanATS(id, jobDescription) { return this.request('POST', `/resumes/${id}/ats-scan`, { jobDescription }) }
   suggestSkills(id, targetRole) { return this.request('POST', `/resumes/${id}/suggest-skills`, { targetRole }) }
+  generateResumeAI(payload) { return this.request('POST', '/resumes/generate-ai', payload) }
+  atsScanDirect(resumeData, jobDescription) { return this.request('POST', '/resumes/ats-scan-direct', { resumeData, jobDescription }) }
+  matchDirect(jobDescription, skills) { return this.request('POST', '/resumes/match-direct', { jobDescription, skills }) }
 
   // ─── Jobs ───
   getJobs(stage) { return this.request('GET', stage ? `/jobs?stage=${stage}` : '/jobs') }

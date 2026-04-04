@@ -1,12 +1,13 @@
-import React from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts'
 import { TrendingUp, Target, Briefcase, Award } from 'lucide-react'
+import api from '../../lib/api'
 
-const weeklyData = [
+const fallbackWeeklyData = [
   { day: 'Mon', score: 68, matches: 4, applies: 2 },
   { day: 'Tue', score: 72, matches: 6, applies: 3 },
   { day: 'Wed', score: 79, matches: 8, applies: 4 },
@@ -16,14 +17,14 @@ const weeklyData = [
   { day: 'Sun', score: 87, matches: 7, applies: 2 },
 ]
 
-const pieData = [
+const fallbackPieData = [
   { name: 'Applied', value: 18, color: '#6366f1' },
   { name: 'Interview', value: 5, color: '#10b981' },
   { name: 'Offer', value: 1, color: '#f59e0b' },
   { name: 'Rejected', value: 3, color: '#ef4444' },
 ]
 
-const skillGapData = [
+const fallbackSkillGapData = [
   { skill: 'React', yours: 90, market: 95 },
   { skill: 'TypeScript', yours: 65, market: 88 },
   { skill: 'Node.js', yours: 85, market: 80 },
@@ -48,12 +49,77 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Analytics() {
-  const topStats = [
-    { label: 'Avg ATS Score', value: '81.4', unit: '/100', trend: '+12', icon: Award, color: 'text-primary-600', bg: 'bg-primary-50' },
-    { label: 'Total Job Matches', value: '24', unit: ' jobs', trend: '+6', icon: Target, color: 'text-accent-600', bg: 'bg-accent-50' },
-    { label: 'Applications Sent', value: '18', unit: '', trend: '+3', icon: Briefcase, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'Interview Rate', value: '27.8', unit: '%', trend: '+5.2%', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-  ]
+  const [dashboard, setDashboard] = useState(null)
+  const [weeklyData, setWeeklyData] = useState(fallbackWeeklyData)
+  const [skillGapData, setSkillGapData] = useState(fallbackSkillGapData)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadAnalytics() {
+      try {
+        const [dashboardRes, scoreHistoryRes, skillGapsRes] = await Promise.all([
+          api.getDashboard(),
+          api.getScoreHistory(),
+          api.getSkillGaps(),
+        ])
+
+        if (!mounted) return
+
+        if (dashboardRes?.success) {
+          setDashboard(dashboardRes.dashboard)
+        }
+
+        if (scoreHistoryRes?.success && Array.isArray(scoreHistoryRes.history) && scoreHistoryRes.history.length) {
+          setWeeklyData(scoreHistoryRes.history.map((point) => ({
+            day: point.day,
+            score: point.score,
+            matches: Math.max(1, Math.round((point.score || 0) / 12)),
+            applies: Math.max(1, Math.round((point.score || 0) / 24)),
+          })))
+        }
+
+        if (skillGapsRes?.success && Array.isArray(skillGapsRes.gaps) && skillGapsRes.gaps.length) {
+          setSkillGapData(skillGapsRes.gaps.map((gap) => ({
+            skill: gap.skill,
+            yours: Math.max(35, 100 - gap.frequency * 12),
+            market: gap.importance === 'high' ? 92 : gap.importance === 'medium' ? 80 : 68,
+          })))
+        }
+      } catch (_error) {
+        // Keep static analytics fallback when API is unavailable.
+      }
+    }
+
+    loadAnalytics()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const topStats = useMemo(() => {
+    const interviews = dashboard?.interviews ?? 5
+    const applications = dashboard?.applications ?? 18
+    const interviewRate = applications > 0 ? ((interviews / applications) * 100).toFixed(1) : '0.0'
+
+    return [
+      { label: 'Avg ATS Score', value: `${dashboard?.resumeScore ?? 81.4}`, unit: '/100', trend: '+12', icon: Award, color: 'text-primary-600', bg: 'bg-primary-50' },
+      { label: 'Total Job Matches', value: `${dashboard?.jobMatches ?? 24}`, unit: ' jobs', trend: '+6', icon: Target, color: 'text-accent-600', bg: 'bg-accent-50' },
+      { label: 'Applications Sent', value: `${applications}`, unit: '', trend: '+3', icon: Briefcase, color: 'text-orange-600', bg: 'bg-orange-50' },
+      { label: 'Interview Rate', value: `${interviewRate}`, unit: '%', trend: '+5.2%', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    ]
+  }, [dashboard])
+
+  const pieData = useMemo(() => {
+    if (!dashboard?.stageBreakdown) return fallbackPieData
+    return [
+      { name: 'Applied', value: dashboard.stageBreakdown.applied || 0, color: '#6366f1' },
+      { name: 'Interview', value: dashboard.stageBreakdown.interview || 0, color: '#10b981' },
+      { name: 'Offer', value: dashboard.stageBreakdown.offer || 0, color: '#f59e0b' },
+      { name: 'Rejected', value: dashboard.stageBreakdown.rejected || 0, color: '#ef4444' },
+    ]
+  }, [dashboard])
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">

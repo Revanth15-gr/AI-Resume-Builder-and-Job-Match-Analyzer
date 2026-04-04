@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, TrendingUp, AlertTriangle, CheckCircle, Sparkles, ArrowUp } from 'lucide-react'
+import { BarChart3, TrendingUp, AlertTriangle, CheckCircle, Sparkles, ArrowUp, Loader2 } from 'lucide-react'
+import api from '../../lib/api'
 
 function CircleGauge({ value, size = 160, color = '#10b981', label, sublabel }) {
   const r = size / 2 - 12
@@ -36,29 +37,95 @@ function CircleGauge({ value, size = 160, color = '#10b981', label, sublabel }) 
 }
 
 export default function ATSScore() {
+  const [jobDescription, setJobDescription] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [atsData, setAtsData] = useState({
+    overall: 87,
+    keywordDensity: 74,
+    formatScore: 92,
+    readability: 81,
+    issues: [
+      { severity: 'warning', message: 'Add more role-specific keywords for higher ATS relevance.', suggestion: 'Include 5 to 7 exact skills from the JD.' },
+      { severity: 'info', message: 'Resume is readable and cleanly structured.', suggestion: 'Keep section headings concise.' },
+    ],
+    platformScores: { naukri: 94, linkedin: 88, indeed: 84, workday: 82, greenhouse: 86 },
+  })
+
   const scores = [
-    { label: 'Overall ATS Score', value: 87, color: '#10b981', sublabel: 'Excellent' },
-    { label: 'Keyword Density', value: 74, color: '#6366f1', sublabel: 'Good' },
-    { label: 'Format Score', value: 92, color: '#f59e0b', sublabel: 'Excellent' },
-    { label: 'Readability', value: 81, color: '#8b5cf6', sublabel: 'Very Good' },
+    { label: 'Overall ATS Score', value: atsData.overall || 0, color: '#10b981', sublabel: (atsData.overall || 0) >= 85 ? 'Excellent' : 'Good' },
+    { label: 'Keyword Density', value: atsData.keywordDensity || 0, color: '#6366f1', sublabel: 'Keyword Match' },
+    { label: 'Format Score', value: atsData.formatScore || 0, color: '#f59e0b', sublabel: 'Formatting' },
+    { label: 'Readability', value: atsData.readability || 0, color: '#8b5cf6', sublabel: 'Readability' },
   ]
 
-  const issues = [
-    { severity: 'high', title: 'Missing action verbs', desc: 'Use strong action verbs like "Led", "Built", "Increased" to start bullet points.', icon: AlertTriangle, color: 'rose' },
-    { severity: 'medium', title: 'Skills section keywords', desc: 'Add "TypeScript", "GraphQL", and "CI/CD" which appear in 85% of target JDs.', icon: AlertTriangle, color: 'orange' },
-    { severity: 'low', title: 'Quantify achievements', desc: 'Add specific metrics to 3 of your bullet points for stronger impact.', icon: AlertTriangle, color: 'yellow' },
-    { severity: 'good', title: 'File format is ATS-safe', desc: 'Your resume is in a clean, parseable format. No tables or complex graphics detected.', icon: CheckCircle, color: 'primary' },
-    { severity: 'good', title: 'Contact info detected', desc: 'All contact details parsed successfully: Email, Phone, LinkedIn, Location.', icon: CheckCircle, color: 'primary' },
-  ]
+  const issues = useMemo(() => {
+    const mapped = (atsData.issues || []).map((issue) => {
+      const isPositive = issue.severity === 'info'
+      return {
+        severity: issue.severity,
+        title: issue.message,
+        desc: issue.suggestion || 'No suggestion provided',
+        icon: isPositive ? CheckCircle : AlertTriangle,
+        color: isPositive ? 'primary' : issue.severity === 'critical' ? 'rose' : 'orange',
+      }
+    })
+
+    return mapped.length
+      ? mapped
+      : [
+          {
+            severity: 'info',
+            title: 'No ATS issues detected yet',
+            desc: 'Run a new scan with a job description to get recommendations.',
+            icon: CheckCircle,
+            color: 'primary',
+          },
+        ]
+  }, [atsData])
 
   const atsSystems = [
-    { name: 'Workday', score: 89, logo: '🔵' },
-    { name: 'Greenhouse', score: 85, logo: '🟢' },
-    { name: 'Lever', score: 91, logo: '🟡' },
-    { name: 'Taleo (Oracle)', score: 82, logo: '🔴' },
-    { name: 'iCIMS', score: 88, logo: '🟠' },
-    { name: 'Naukri ATS', score: 94, logo: '🇮🇳' },
+    { name: 'Workday', score: atsData.platformScores?.workday || 0, logo: '🔵' },
+    { name: 'Greenhouse', score: atsData.platformScores?.greenhouse || 0, logo: '🟢' },
+    { name: 'Lever', score: atsData.platformScores?.linkedin || 0, logo: '🟡' },
+    { name: 'Taleo (Oracle)', score: atsData.platformScores?.indeed || 0, logo: '🔴' },
+    { name: 'iCIMS', score: atsData.platformScores?.linkedin || 0, logo: '🟠' },
+    { name: 'Naukri ATS', score: atsData.platformScores?.naukri || 0, logo: '🇮🇳' },
   ]
+
+  const handleRunScan = async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const latest = await api.getLatestResume()
+      let response
+
+      if (latest?.resume?._id) {
+        response = await api.scanATS(latest.resume._id, jobDescription)
+        if (response?.success && response.atsScore) {
+          setAtsData(response.atsScore)
+        }
+      } else {
+        response = await api.atsScanDirect(
+          {
+            personal: {},
+            experience: [],
+            skills: { technical: [], tools: [], soft: [] },
+            education: [],
+          },
+          jobDescription
+        )
+        if (response?.success && response.atsScore) {
+          setAtsData(response.atsScore)
+        }
+      }
+    } catch (scanError) {
+      setError(scanError.message || 'Failed to run ATS scan')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -75,6 +142,23 @@ export default function ATSScore() {
           <TrendingUp className="w-4 h-4" />
           <span>+12 from last scan</span>
         </div>
+      </div>
+
+      {/* Scan Controls */}
+      <div className="glass-card p-6">
+        <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Job Description</label>
+        <textarea
+          rows={5}
+          value={jobDescription}
+          onChange={(event) => setJobDescription(event.target.value)}
+          placeholder="Paste a target JD to run ATS scoring against backend routes"
+          className="input-glass resize-none"
+        />
+        {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
+        <button onClick={handleRunScan} disabled={loading} className="btn-primary mt-4 disabled:opacity-60">
+          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {loading ? 'Running Scan...' : 'Run ATS Scan'}
+        </button>
       </div>
 
       {/* Score Circles */}

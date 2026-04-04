@@ -4,10 +4,11 @@
  */
 
 import Resume from '../models/Resume.js'
+import { env } from '../config/env.js'
 
-const NVIDIA_BASE_URL = 'https://integrate.api.nvidia.com/v1'
-const NVIDIA_API_KEY = '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'
-const MODEL = 'openai/gpt-oss-20b'
+const NVIDIA_BASE_URL = env.NVIDIA_BASE_URL
+const NVIDIA_API_KEY = env.NVIDIA_API_KEY
+const MODEL = env.NVIDIA_MODEL
 
 // ──────────────── NVIDIA Chat Helper ────────────────
 async function chatCompletion(messages, maxTokens = 2048) {

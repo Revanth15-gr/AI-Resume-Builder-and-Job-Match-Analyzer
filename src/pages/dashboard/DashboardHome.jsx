@@ -1,10 +1,11 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import {
   FileText, Target, BarChart3, Briefcase, TrendingUp,
   ArrowRight, Plus, CheckCircle, Clock, Zap, Star
 } from 'lucide-react'
+import api from '../../lib/api'
 
 const fadeUp = {
   initial: { opacity: 0, y: 20 },
@@ -55,11 +56,33 @@ function QuickAction({ to, icon: Icon, label, desc, color }) {
 }
 
 export default function DashboardHome() {
+  const [dashboard, setDashboard] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadDashboard() {
+      try {
+        const response = await api.getDashboard()
+        if (mounted && response?.success) {
+          setDashboard(response.dashboard)
+        }
+      } catch (_error) {
+        // Preserve premium UI with static fallback when API is unavailable.
+      }
+    }
+
+    loadDashboard()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const stats = [
-    { label: 'Resume Score', value: '87/100', change: '+12', icon: FileText, color: 'text-primary-600', bg: 'bg-primary-50' },
-    { label: 'Job Matches', value: '24', change: '+6', icon: Target, color: 'text-accent-600', bg: 'bg-accent-50' },
-    { label: 'Applications', value: '18', change: '+3', icon: Briefcase, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { label: 'Interviews', value: '5', change: '+2', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Resume Score', value: `${dashboard?.resumeScore ?? 87}/100`, change: '+12', icon: FileText, color: 'text-primary-600', bg: 'bg-primary-50' },
+    { label: 'Job Matches', value: `${dashboard?.jobMatches ?? 24}`, change: '+6', icon: Target, color: 'text-accent-600', bg: 'bg-accent-50' },
+    { label: 'Applications', value: `${dashboard?.applications ?? 18}`, change: '+3', icon: Briefcase, color: 'text-orange-600', bg: 'bg-orange-50' },
+    { label: 'Interviews', value: `${dashboard?.interviews ?? 5}`, change: '+2', icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50' },
   ]
 
   const recentActivity = [

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useLocation } from 'react-router-dom'
+import api from '../../lib/api'
 import {
   Sparkles, User, GraduationCap, Briefcase, Code2,
   ChevronRight, ChevronLeft, Download, Save, Eye,
@@ -384,20 +385,15 @@ export default function ResumeBuilder() {
   const handleGenerate = async () => {
     setGenerating(true)
     try {
-      const res = await fetch('/api/resumes/generate-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          personal: { name: data.name, email: data.email, phone: data.phone, location: data.location, linkedin: data.linkedin, portfolio: data.portfolio, summary: data.summary },
-          education: data.education,
-          experience: data.experience,
-          skills: data.skills,
-          template: selectedTemplate,
-        }),
+      const response = await api.generateResumeAI({
+        personal: { name: data.name, email: data.email, phone: data.phone, location: data.location, linkedin: data.linkedin, portfolio: data.portfolio, summary: data.summary },
+        education: data.education,
+        experience: data.experience,
+        skills: data.skills,
+        template: selectedTemplate,
       })
-      const json = await res.json()
-      if (json.success && json.generated) {
-        setGeneratedData(json.generated)
+      if (response.success && response.generated) {
+        setGeneratedData(response.generated)
       }
     } catch (err) {
       console.error('Generation failed:', err)

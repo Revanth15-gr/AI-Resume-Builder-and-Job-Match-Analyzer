@@ -3,7 +3,8 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
-import { connectDB } from './config/db.js'
+import { connectDB, isDbConnected } from './config/db.js'
+import { env } from './config/env.js'
 import authRoutes from './routes/auth.js'
 import resumeRoutes from './routes/resume.js'
 import jobRoutes from './routes/job.js'
@@ -12,11 +13,11 @@ import analyticsRoutes from './routes/analytics.js'
 dotenv.config()
 
 const app = express()
-const PORT = process.env.PORT || 5000
+const PORT = env.PORT
 
 // Security middleware
 app.use(helmet())
-app.use(cors({ origin: ['http://localhost:5173', 'http://localhost:3000'], credentials: true }))
+app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }))
 app.use(express.json({ limit: '10mb' }))
 
 // Rate limiting
@@ -31,7 +32,9 @@ app.use('/api/analytics', analyticsRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' })
+  const db = isDbConnected() ? 'connected' : 'disconnected'
+  const status = db === 'connected' || env.ALLOW_DB_OPTIONAL ? 'ok' : 'degraded'
+  res.json({ status, db, timestamp: new Date().toISOString(), version: '1.0.0' })
 })
 
 // Error handler
@@ -45,11 +48,19 @@ app.use((err, req, res, next) => {
 
 // Start server
 const start = async () => {
-  await connectDB()
-  app.listen(PORT, () => {
-    console.log(`\n  🚀 ResumeAI API running on http://localhost:${PORT}`)
-    console.log(`  📦 Environment: ${process.env.NODE_ENV || 'development'}\n`)
-  })
+  try {
+    const connected = await connectDB()
+    app.listen(PORT, () => {
+      console.log(`\n  🚀 ResumeAI API running on http://localhost:${PORT}`)
+      console.log(`  📦 Environment: ${env.NODE_ENV}\n`)
+      if (!connected) {
+        console.log('  ⚠️  API started without MongoDB. DB-backed routes will return 503.')
+      }
+    })
+  } catch (error) {
+    console.error('Startup failed:', error.message)
+    process.exit(1)
+  }
 }
 
 start()

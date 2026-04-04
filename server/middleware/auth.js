@@ -1,8 +1,14 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
+import { env } from '../config/env.js'
+import { isDbConnected } from '../config/db.js'
 
 export const protect = async (req, res, next) => {
   try {
+    if (!isDbConnected()) {
+      return res.status(503).json({ success: false, message: 'Database unavailable. Try again shortly.' })
+    }
+
     let token = req.headers.authorization?.startsWith('Bearer')
       ? req.headers.authorization.split(' ')[1]
       : null
@@ -11,7 +17,7 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Not authorized — no token' })
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const decoded = jwt.verify(token, env.JWT_SECRET)
     req.user = await User.findById(decoded.id).select('-password')
 
     if (!req.user) {
@@ -25,5 +31,5 @@ export const protect = async (req, res, next) => {
 }
 
 export const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE || '7d' })
+  return jwt.sign({ id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRE })
 }

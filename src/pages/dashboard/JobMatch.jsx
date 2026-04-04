@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Target, Sparkles, CheckCircle, XCircle, AlertCircle, Loader2, Copy, BarChart3 } from 'lucide-react'
+import api from '../../lib/api'
 
 export default function JobMatch() {
   const [jd, setJd] = useState('')
@@ -13,15 +14,17 @@ export default function JobMatch() {
     setAnalyzing(true)
     setError('')
     try {
-      const res = await fetch('/api/resumes/match-direct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jobDescription: jd,
-          skills: ['React', 'Node.js', 'JavaScript', 'MongoDB', 'Python', 'REST API', 'Git', 'Docker', 'AWS'],
-        }),
-      })
-      const json = await res.json()
+      let json
+      try {
+        json = await api.analyzeJob(jd)
+      } catch (routeError) {
+        // Fallback route to keep experience available during optional DB mode.
+        json = await api.matchDirect(
+          jd,
+          ['React', 'Node.js', 'JavaScript', 'MongoDB', 'Python', 'REST API', 'Git', 'Docker', 'AWS']
+        )
+      }
+
       if (json.success) {
         setResult({
           matchScore: json.matchScore,

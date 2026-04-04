@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Kanban, Plus, Building2, Calendar, Link as LinkIcon, MoreHorizontal } from 'lucide-react'
+import api from '../../lib/api'
 
 const columns = [
   {
@@ -74,6 +75,57 @@ function JobCard({ job }) {
 }
 
 export default function JobTracker() {
+  const [apiColumns, setApiColumns] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadJobs() {
+      try {
+        const [jobsResponse, statsResponse] = await Promise.all([api.getJobs(), api.getJobStats()])
+        if (!mounted || !jobsResponse?.success) return
+
+        const jobs = jobsResponse.jobs || []
+        const stats = statsResponse?.stats || {}
+        const grouped = {
+          saved: [],
+          applied: [],
+          interview: [],
+          offer: [],
+          rejected: [],
+        }
+
+        for (const job of jobs) {
+          const stage = job.stage || 'saved'
+          if (!grouped[stage]) grouped[stage] = []
+          grouped[stage].push({
+            id: job._id,
+            title: job.title,
+            company: job.company,
+            date: job.updatedAt ? new Date(job.updatedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) : '—',
+            salary: job.salary || '—',
+            logo: '💼',
+          })
+        }
+
+        setApiColumns(columns.map((col) => ({
+          ...col,
+          count: typeof stats[col.id] === 'number' ? stats[col.id] : grouped[col.id]?.length || 0,
+          jobs: grouped[col.id]?.length ? grouped[col.id] : col.jobs,
+        })))
+      } catch (_error) {
+        // Keep static fallback when backend is unavailable.
+      }
+    }
+
+    loadJobs()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const effectiveColumns = apiColumns || columns
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {/* Header */}
@@ -96,7 +148,7 @@ export default function JobTracker() {
       {/* Kanban Board */}
       <div className="overflow-x-auto pb-4">
         <div className="flex gap-4 min-w-max">
-          {columns.map((col) => (
+          {effectiveColumns.map((col) => (
             <div key={col.id} className="w-64 shrink-0">
               {/* Column Header */}
               <div className="flex items-center justify-between mb-3">
@@ -124,7 +176,7 @@ export default function JobTracker() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {columns.map(col => (
+        {effectiveColumns.map(col => (
           <div key={col.id} className="glass-card p-4 text-center">
             <p className="font-display font-bold text-2xl text-slate-900">{col.count}</p>
             <p className={`text-xs font-semibold mt-1 px-2 py-0.5 rounded-md inline-block ${col.color}`}>{col.label}</p>

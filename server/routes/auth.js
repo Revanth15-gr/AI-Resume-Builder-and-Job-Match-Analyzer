@@ -1,8 +1,16 @@
 import { Router } from 'express'
 import User from '../models/User.js'
 import { protect, generateToken } from '../middleware/auth.js'
+import { isDbConnected } from '../config/db.js'
 
 const router = Router()
+
+router.use((req, res, next) => {
+  if (!isDbConnected()) {
+    return res.status(503).json({ success: false, message: 'Database unavailable. Auth service is temporarily offline.' })
+  }
+  next()
+})
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {

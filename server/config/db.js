@@ -1,12 +1,19 @@
 import mongoose from 'mongoose'
+import { env } from './env.js'
+
+export const isDbConnected = () => mongoose.connection.readyState === 1
 
 export const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI)
+    const conn = await mongoose.connect(env.MONGO_URI)
     console.log(`  ✅ MongoDB connected: ${conn.connection.host}`)
+    return true
   } catch (err) {
     console.error(`  ❌ MongoDB connection error: ${err.message}`)
-    // Don't crash — allow the app to run with mock data if no DB
-    console.log('  ⚠️  Running without database — API will return mock data')
+    if (env.ALLOW_DB_OPTIONAL) {
+      console.warn('  ⚠️  Continuing in offline mode (ALLOW_DB_OPTIONAL=true)')
+      return false
+    }
+    throw err
   }
 }
