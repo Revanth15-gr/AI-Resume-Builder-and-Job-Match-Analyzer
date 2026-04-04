@@ -1,19 +1,23 @@
-import mongoose from 'mongoose'
-import { env } from './env.js'
+import mongoose from "mongoose";
+import { env } from "./env.js";
 
-export const isDbConnected = () => mongoose.connection.readyState === 1
+let isConnected = false;
 
 export const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(env.MONGO_URI)
-    console.log(`  ✅ MongoDB connected: ${conn.connection.host}`)
-    return true
-  } catch (err) {
-    console.error(`  ❌ MongoDB connection error: ${err.message}`)
+    await mongoose.connect(env.MONGO_URI);
+    isConnected = true;
+    console.log("✅ MongoDB connected");
+    return true;
+  } catch (error) {
+    isConnected = false;
+    console.error("❌ MongoDB connection error:", error.message);
     if (env.ALLOW_DB_OPTIONAL) {
-      console.warn('  ⚠️  Continuing in offline mode (ALLOW_DB_OPTIONAL=true)')
-      return false
+      console.warn("⚠️  Continuing in offline mode (ALLOW_DB_OPTIONAL=true)");
+      return false;
     }
-    throw err
+    throw error;
   }
-}
+};
+
+export const isDbConnected = () => isConnected;

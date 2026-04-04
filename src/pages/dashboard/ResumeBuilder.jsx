@@ -53,12 +53,12 @@ function StepIndicator({ currentStep }) {
 
 function PersonalInfoStep({ data, setData }) {
   const fields = [
-    { key: 'name', label: 'Full Name', placeholder: 'Rahul Sharma', type: 'text' },
-    { key: 'email', label: 'Email Address', placeholder: 'rahul@example.com', type: 'email' },
-    { key: 'phone', label: 'Phone Number', placeholder: '+91 98765 43210', type: 'tel' },
-    { key: 'location', label: 'Location', placeholder: 'Bangalore, India', type: 'text' },
-    { key: 'linkedin', label: 'LinkedIn URL', placeholder: 'linkedin.com/in/rahulsharma', type: 'url' },
-    { key: 'portfolio', label: 'Portfolio / GitHub', placeholder: 'github.com/rahul', type: 'url' },
+    { key: 'name', label: 'Full Name', placeholder: 'Enter your full name', type: 'text' },
+    { key: 'email', label: 'Email Address', placeholder: 'Enter your email address', type: 'email' },
+    { key: 'phone', label: 'Phone Number', placeholder: 'Enter your phone number', type: 'tel' },
+    { key: 'location', label: 'Location', placeholder: 'Enter your location', type: 'text' },
+    { key: 'linkedin', label: 'LinkedIn URL', placeholder: 'Enter your LinkedIn profile URL', type: 'url' },
+    { key: 'portfolio', label: 'Portfolio / GitHub', placeholder: 'Enter your portfolio or GitHub URL', type: 'url' },
   ]
   return (
     <div>
@@ -81,7 +81,7 @@ function PersonalInfoStep({ data, setData }) {
 }
 
 function EducationStep({ data, setData }) {
-  const edu = data.education || [{ degree: 'B.Tech Computer Science', institution: 'VIT University', year: '2019 – 2023', gpa: '8.7 CGPA', coursework: 'Data Structures, Cloud Computing, Machine Learning' }]
+  const edu = data.education || []
   const updateEdu = (i, field, val) => {
     const updated = [...edu]; updated[i] = { ...updated[i], [field]: val }
     setData(prev => ({ ...prev, education: updated }))
@@ -92,15 +92,20 @@ function EducationStep({ data, setData }) {
     <div>
       <h2 className="font-display font-bold text-xl text-slate-800 mb-1">Education</h2>
       <p className="text-sm text-slate-400 mb-6">Add your academic qualifications.</p>
+      {edu.length === 0 && (
+        <div className="glass-card p-5 mb-4 text-sm text-slate-400 border-dashed border border-slate-200">
+          No education entries yet. Click "Add Another Education" to begin.
+        </div>
+      )}
       {edu.map((e, i) => (
         <div key={i} className="glass-card p-5 space-y-4 mb-4">
           <div className="grid md:grid-cols-2 gap-4">
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Degree</label><input placeholder="B.Tech Computer Science" value={e.degree} onChange={ev => updateEdu(i,'degree',ev.target.value)} className="input-glass" /></div>
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Institution</label><input placeholder="IIT Delhi" value={e.institution} onChange={ev => updateEdu(i,'institution',ev.target.value)} className="input-glass" /></div>
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Year</label><input placeholder="2020 – 2024" value={e.year} onChange={ev => updateEdu(i,'year',ev.target.value)} className="input-glass" /></div>
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">GPA / Percentage</label><input placeholder="8.5 CGPA" value={e.gpa} onChange={ev => updateEdu(i,'gpa',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Degree</label><input placeholder="Enter degree" value={e.degree} onChange={ev => updateEdu(i,'degree',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Institution</label><input placeholder="Enter institution name" value={e.institution} onChange={ev => updateEdu(i,'institution',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Year</label><input placeholder="Enter year or duration" value={e.year} onChange={ev => updateEdu(i,'year',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">GPA / Percentage</label><input placeholder="Enter GPA or percentage" value={e.gpa} onChange={ev => updateEdu(i,'gpa',ev.target.value)} className="input-glass" /></div>
           </div>
-          <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Coursework</label><textarea rows={2} placeholder="Data Structures, ML..." value={e.coursework} onChange={ev => updateEdu(i,'coursework',ev.target.value)} className="input-glass resize-none" /></div>
+          <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Coursework</label><textarea rows={2} placeholder="Enter relevant coursework" value={e.coursework} onChange={ev => updateEdu(i,'coursework',ev.target.value)} className="input-glass resize-none" /></div>
         </div>
       ))}
       <button onClick={addEdu} className="text-sm text-primary-600 font-semibold flex items-center gap-1 hover:text-primary-700"><span className="text-lg">+</span> Add Another Education</button>
@@ -109,7 +114,7 @@ function EducationStep({ data, setData }) {
 }
 
 function ExperienceStep({ data, setData }) {
-  const exp = data.experience || [{ title: 'Full Stack Developer', company: 'Infosys', duration: 'Jun 2023 – Present', location: 'Pune, India', responsibilities: '• Built scalable REST APIs using Node.js\n• Developed React frontend components\n• Collaborated with cross-functional teams' }]
+  const exp = data.experience || []
   const updateExp = (i, field, val) => {
     const updated = [...exp]; updated[i] = { ...updated[i], [field]: val }
     setData(prev => ({ ...prev, experience: updated }))
@@ -120,17 +125,22 @@ function ExperienceStep({ data, setData }) {
     <div>
       <h2 className="font-display font-bold text-xl text-slate-800 mb-1">Work Experience</h2>
       <p className="text-sm text-slate-400 mb-6">Add your work history. AI will enhance your bullet points.</p>
+      {exp.length === 0 && (
+        <div className="glass-card p-5 mb-4 text-sm text-slate-400 border-dashed border border-slate-200">
+          No experience entries yet. Click "Add Another Experience" to begin.
+        </div>
+      )}
       {exp.map((e, i) => (
         <div key={i} className="glass-card p-5 space-y-4 mb-4">
           <div className="grid md:grid-cols-2 gap-4">
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Job Title</label><input placeholder="Software Engineer" value={e.title} onChange={ev => updateExp(i,'title',ev.target.value)} className="input-glass" /></div>
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Company</label><input placeholder="TechCorp India" value={e.company} onChange={ev => updateExp(i,'company',ev.target.value)} className="input-glass" /></div>
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Duration</label><input placeholder="Jan 2023 – Present" value={e.duration} onChange={ev => updateExp(i,'duration',ev.target.value)} className="input-glass" /></div>
-            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Location</label><input placeholder="Bangalore, India" value={e.location} onChange={ev => updateExp(i,'location',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Job Title</label><input placeholder="Enter job title" value={e.title} onChange={ev => updateExp(i,'title',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Company</label><input placeholder="Enter company name" value={e.company} onChange={ev => updateExp(i,'company',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Duration</label><input placeholder="Enter duration" value={e.duration} onChange={ev => updateExp(i,'duration',ev.target.value)} className="input-glass" /></div>
+            <div><label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Location</label><input placeholder="Enter location" value={e.location} onChange={ev => updateExp(i,'location',ev.target.value)} className="input-glass" /></div>
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Key Responsibilities</label>
-            <textarea rows={4} placeholder="• Built React dashboard reducing load time by 40%" value={e.responsibilities} onChange={ev => updateExp(i,'responsibilities',ev.target.value)} className="input-glass resize-none" />
+            <textarea rows={4} placeholder="Enter responsibilities or achievements" value={e.responsibilities} onChange={ev => updateExp(i,'responsibilities',ev.target.value)} className="input-glass resize-none" />
           </div>
         </div>
       ))}
@@ -140,7 +150,7 @@ function ExperienceStep({ data, setData }) {
 }
 
 function SkillsStep({ data, setData }) {
-  const skills = data.skills || { technical: ['React', 'Node.js', 'Python', 'MongoDB', 'AWS', 'Docker'], tools: ['Git', 'Jira', 'Figma', 'VS Code', 'Postman'], soft: ['Problem Solving', 'Team Leadership', 'Communication'] }
+  const skills = data.skills || { technical: [], tools: [], soft: [] }
   const [newSkill, setNewSkill] = useState({ technical: '', tools: '', soft: '' })
 
   const addSkill = (cat) => {
@@ -370,12 +380,16 @@ export default function ResumeBuilder() {
 
   const [step, setStep] = useState(initialStep)
   const [data, setData] = useState({
-    name: 'Rahul Sharma', email: 'rahul@example.com', phone: '+91 98765 43210',
-    location: 'Bangalore, India', linkedin: 'linkedin.com/in/rahulsharma', portfolio: 'github.com/rahul',
+    name: '',
+    email: '',
+    phone: '',
+    location: '',
+    linkedin: '',
+    portfolio: '',
     summary: '',
-    education: [{ degree: 'B.Tech Computer Science', institution: 'VIT University', year: '2019 – 2023', gpa: '8.7 CGPA', coursework: 'Data Structures, Cloud Computing, ML' }],
-    experience: [{ title: 'Full Stack Developer', company: 'Infosys', duration: 'Jun 2023 – Present', location: 'Pune, India', responsibilities: '• Built scalable REST APIs using Node.js\n• Developed React frontend components\n• Collaborated with cross-functional teams' }],
-    skills: { technical: ['React', 'Node.js', 'Python', 'MongoDB', 'AWS', 'Docker'], tools: ['Git', 'Jira', 'Figma', 'VS Code', 'Postman'], soft: ['Problem Solving', 'Team Leadership', 'Communication'] },
+    education: [],
+    experience: [],
+    skills: { technical: [], tools: [], soft: [] },
   })
   const [selectedTemplate, setSelectedTemplate] = useState(initialTemplate)
   const [generating, setGenerating] = useState(false)

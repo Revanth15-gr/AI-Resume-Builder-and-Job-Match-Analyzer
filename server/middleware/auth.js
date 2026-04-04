@@ -31,5 +31,5 @@ export const protect = async (req, res, next) => {
 }
 
 export const generateToken = (id) => {
-  return jwt.sign({ id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRE })
+  return jwt.sign({ id }, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRE || '7d' })
 }

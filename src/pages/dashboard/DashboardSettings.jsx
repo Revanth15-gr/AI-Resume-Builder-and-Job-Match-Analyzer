@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   Bell, CreditCard, Save, Camera, CheckCircle
 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 
 function SettingsSection({ title, children }) {
   return (
@@ -24,7 +25,29 @@ function ToggleSwitch({ checked, onChange }) {
   )
 }
 
+const emptyForm = {
+  name: '',
+  email: '',
+  phone: '',
+  location: '',
+  currentRole: '',
+  targetRole: '',
+  targetCompanies: '',
+  experienceLevel: 'mid',
+  workMode: 'hybrid',
+}
+
+function getDisplayName(user) {
+  if (!user?.name) return 'Your Profile'
+  return user.name
+}
+
+function getFirstName(name) {
+  return (name || '').split(' ').filter(Boolean)[0] || 'You'
+}
+
 export default function DashboardSettings() {
+  const { user, updateProfile } = useAuth()
   const [notifications, setNotifications] = useState({
     jobMatches: true,
     atsAlerts: true,
@@ -32,25 +55,70 @@ export default function DashboardSettings() {
     interviewReminders: true,
     marketing: false,
   })
+  const [activeTab, setActiveTab] = useState('Profile')
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState(emptyForm)
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
-  }
+  useEffect(() => {
+    if (!user) return
+    setForm({
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      location: user.location || '',
+      currentRole: user.currentRole || '',
+      targetRole: user.targetRole || '',
+      targetCompanies: Array.isArray(user.targetCompanies) ? user.targetCompanies.join(', ') : '',
+      experienceLevel: user.experienceLevel || 'mid',
+      workMode: user.workMode || 'hybrid',
+    })
+    setNotifications({
+      jobMatches: user.preferences?.notifications?.jobMatches ?? true,
+      atsAlerts: user.preferences?.notifications?.atsAlerts ?? true,
+      weeklyDigest: user.preferences?.notifications?.weeklyDigest ?? true,
+      interviewReminders: user.preferences?.notifications?.interviewReminders ?? true,
+      marketing: user.preferences?.notifications?.marketing ?? false,
+    })
+  }, [user])
 
   const tabs = ['Profile', 'Security', 'Notifications', 'Appearance', 'Billing']
-  const [activeTab, setActiveTab] = useState('Profile')
+
+  const handleSave = async () => {
+    try {
+      setSaving(true)
+      await updateProfile({
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        location: form.location.trim(),
+        currentRole: form.currentRole.trim(),
+        targetRole: form.targetRole.trim(),
+        targetCompanies: form.targetCompanies
+          .split(',')
+          .map(item => item.trim())
+          .filter(Boolean),
+        experienceLevel: form.experienceLevel,
+        workMode: form.workMode,
+        preferences: {
+          notifications,
+          theme: user?.preferences?.theme || 'emerald',
+          language: user?.preferences?.language || 'en-IN',
+        },
+      })
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2500)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      {/* Header */}
       <div className="glass-card p-6">
         <h2 className="font-display font-bold text-xl text-slate-800 mb-1">Settings</h2>
         <p className="text-sm text-slate-400">Manage your account, preferences, and notifications</p>
       </div>
 
-      {/* Tab Navigation */}
       <div className="flex gap-2 flex-wrap">
         {tabs.map(tab => (
           <button
@@ -65,56 +133,56 @@ export default function DashboardSettings() {
         ))}
       </div>
 
-      {/* Profile Settings */}
       {activeTab === 'Profile' && (
         <div className="space-y-5">
           <SettingsSection title="Profile Information">
-            {/* Avatar */}
             <div className="flex items-center gap-4">
               <div className="relative">
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                  R
+                  {getFirstName(user?.name)[0]?.toUpperCase() || 'U'}
                 </div>
                 <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full border border-slate-200 flex items-center justify-center shadow hover:bg-slate-50 transition-colors">
                   <Camera className="w-3.5 h-3.5 text-slate-500" />
                 </button>
               </div>
               <div>
-                <p className="font-semibold text-slate-800">Rahul Sharma</p>
-                <p className="text-sm text-slate-400">rahul@example.com</p>
+                <p className="font-semibold text-slate-800">{getDisplayName(user)}</p>
+                <p className="text-sm text-slate-400">{user?.email}</p>
                 <button className="text-xs text-primary-600 font-semibold mt-1 hover:text-primary-700">Change Photo</button>
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               {[
-                { label: 'First Name', value: 'Rahul', type: 'text' },
-                { label: 'Last Name', value: 'Sharma', type: 'text' },
-                { label: 'Email', value: 'rahul@example.com', type: 'email' },
-                { label: 'Phone', value: '+91 98765 43210', type: 'tel' },
-                { label: 'Current Role', value: 'Full Stack Developer', type: 'text' },
-                { label: 'Location', value: 'Pune, India', type: 'text' },
-              ].map(({ label, value, type }) => (
-                <div key={label}>
+                { key: 'name', label: 'Full Name', type: 'text' },
+                { key: 'email', label: 'Email', type: 'email', disabled: true },
+                { key: 'phone', label: 'Phone', type: 'tel' },
+                { key: 'location', label: 'Location', type: 'text' },
+                { key: 'currentRole', label: 'Current Role', type: 'text' },
+                { key: 'targetRole', label: 'Target Role', type: 'text' },
+              ].map(({ key, label, type, disabled }) => (
+                <div key={key}>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">{label}</label>
-                  <input type={type} defaultValue={value} className="input-glass" />
+                  <input
+                    type={type}
+                    value={form[key]}
+                    disabled={disabled}
+                    onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+                    className="input-glass disabled:opacity-60 disabled:bg-slate-50"
+                  />
                 </div>
               ))}
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Target Role</label>
-              <input type="text" defaultValue="Senior Software Engineer" className="input-glass" />
-            </div>
-
-            <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Target Companies</label>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {['Google', 'Amazon', 'Microsoft', 'Flipkart', 'Razorpay'].map(c => (
-                  <span key={c} className="badge-green cursor-pointer hover:bg-primary-200 transition-colors">{c} ×</span>
-                ))}
-              </div>
-              <input type="text" placeholder="Add company..." className="input-glass" />
+              <input
+                type="text"
+                value={form.targetCompanies}
+                onChange={e => setForm(prev => ({ ...prev, targetCompanies: e.target.value }))}
+                placeholder="Google, Amazon, Microsoft"
+                className="input-glass"
+              />
             </div>
           </SettingsSection>
 
@@ -122,31 +190,26 @@ export default function DashboardSettings() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Experience Level</label>
-                <select className="input-glass">
-                  <option>Mid-Level (2-5 years)</option>
-                  <option>Junior (0-2 years)</option>
-                  <option>Senior (5+ years)</option>
+                <select
+                  value={form.experienceLevel}
+                  onChange={e => setForm(prev => ({ ...prev, experienceLevel: e.target.value }))}
+                  className="input-glass"
+                >
+                  <option value="junior">Junior (0-2 years)</option>
+                  <option value="mid">Mid-Level (2-5 years)</option>
+                  <option value="senior">Senior (5+ years)</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Work Mode</label>
-                <select className="input-glass">
-                  <option>Hybrid</option>
-                  <option>Remote</option>
-                  <option>On-site</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Min. Expected Salary</label>
-                <input type="text" defaultValue="₹20 LPA" className="input-glass" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Notice Period</label>
-                <select className="input-glass">
-                  <option>Immediate</option>
-                  <option>15 days</option>
-                  <option>1 month</option>
-                  <option>2 months</option>
+                <select
+                  value={form.workMode}
+                  onChange={e => setForm(prev => ({ ...prev, workMode: e.target.value }))}
+                  className="input-glass"
+                >
+                  <option value="hybrid">Hybrid</option>
+                  <option value="remote">Remote</option>
+                  <option value="onsite">On-site</option>
                 </select>
               </div>
             </div>
@@ -154,7 +217,6 @@ export default function DashboardSettings() {
         </div>
       )}
 
-      {/* Notifications Settings */}
       {activeTab === 'Notifications' && (
         <SettingsSection title="Notification Preferences">
           <div className="space-y-4">
@@ -180,7 +242,6 @@ export default function DashboardSettings() {
         </SettingsSection>
       )}
 
-      {/* Security */}
       {activeTab === 'Security' && (
         <SettingsSection title="Security Settings">
           <div className="space-y-4">
@@ -200,7 +261,6 @@ export default function DashboardSettings() {
         </SettingsSection>
       )}
 
-      {/* Billing */}
       {activeTab === 'Billing' && (
         <div className="space-y-5">
           <div className="glass-card p-6 border-primary-100 bg-gradient-to-br from-primary-50/50 to-accent-50/30">
@@ -229,7 +289,6 @@ export default function DashboardSettings() {
         </div>
       )}
 
-      {/* Appearance */}
       {activeTab === 'Appearance' && (
         <SettingsSection title="Theme & Display">
           <div className="space-y-4">
@@ -258,11 +317,12 @@ export default function DashboardSettings() {
         </SettingsSection>
       )}
 
-      {/* Save Button */}
       <div className="flex justify-end">
-        <button onClick={handleSave} className={`btn-primary ${saved ? 'bg-emerald-500' : ''}`}>
+        <button onClick={handleSave} disabled={saving} className={`btn-primary ${saved ? 'bg-emerald-500' : ''} disabled:opacity-70`}>
           {saved ? (
             <><CheckCircle className="w-4 h-4" /> Saved!</>
+          ) : saving ? (
+            <span className="inline-flex items-center gap-2"><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Saving...</span>
           ) : (
             <><Save className="w-4 h-4" /> Save Changes</>
           )}

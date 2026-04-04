@@ -85,9 +85,12 @@ router.delete('/:id', protect, async (req, res) => {
 // POST /api/resumes/:id/generate
 router.post('/:id/generate', protect, async (req, res) => {
   try {
-    const resume = await Resume.findOne({ _id: req.params.id, user: req.user._id }); if (!resume) return res.status(404).json({ success: false, message: 'Not found' })
+    const resume = await Resume.findOne({ _id: req.params.id, user: req.user._id })
+    if (!resume) return res.status(404).json({ success: false, message: 'Not found' })
     const ai = await generateResumeSummary(resume)
-    resume.aiGenerated = { summary: ai.summary, bulletPoints: ai.bulletPoints, keywords: ai.keywords, generatedAt: new Date() }; resume.status = 'generated'; await resume.save()
+    resume.aiGenerated = { summary: ai.summary, bulletPoints: ai.bulletPoints, keywords: ai.keywords, generatedAt: new Date() }
+    resume.status = 'generated'
+    await resume.save()
     res.json({ success: true, resume })
   } catch (err) { res.status(500).json({ success: false, message: err.message }) }
 })
@@ -95,8 +98,11 @@ router.post('/:id/generate', protect, async (req, res) => {
 // POST /api/resumes/:id/ats-scan
 router.post('/:id/ats-scan', protect, async (req, res) => {
   try {
-    const resume = await Resume.findOne({ _id: req.params.id, user: req.user._id }); if (!resume) return res.status(404).json({ success: false, message: 'Not found' })
-    const ats = await analyzeATS(resume, req.body.jobDescription); resume.atsScore = { ...ats, lastScanned: new Date() }; await resume.save()
+    const resume = await Resume.findOne({ _id: req.params.id, user: req.user._id })
+    if (!resume) return res.status(404).json({ success: false, message: 'Not found' })
+    const ats = await analyzeATS(resume, req.body.jobDescription)
+    resume.atsScore = { ...ats, lastScanned: new Date() }
+    await resume.save()
     res.json({ success: true, atsScore: resume.atsScore })
   } catch (err) { res.status(500).json({ success: false, message: err.message }) }
 })
@@ -104,7 +110,8 @@ router.post('/:id/ats-scan', protect, async (req, res) => {
 // POST /api/resumes/:id/suggest-skills
 router.post('/:id/suggest-skills', protect, async (req, res) => {
   try {
-    const resume = await Resume.findOne({ _id: req.params.id, user: req.user._id }); if (!resume) return res.status(404).json({ success: false, message: 'Not found' })
+    const resume = await Resume.findOne({ _id: req.params.id, user: req.user._id })
+    if (!resume) return res.status(404).json({ success: false, message: 'Not found' })
     const suggestions = await suggestSkills(resume, req.body.targetRole)
     res.json({ success: true, suggestions })
   } catch (err) { res.status(500).json({ success: false, message: err.message }) }

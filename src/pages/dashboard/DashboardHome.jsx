@@ -6,6 +6,7 @@ import {
   ArrowRight, Plus, CheckCircle, Clock, Zap, Star
 } from 'lucide-react'
 import api from '../../lib/api'
+import { useAuth } from '../../context/AuthContext'
 
 const fadeUp = {
   initial: { opacity: 0, y: 20 },
@@ -55,7 +56,12 @@ function QuickAction({ to, icon: Icon, label, desc, color }) {
   )
 }
 
+function firstName(name) {
+  return (name || 'there').split(' ')[0]
+}
+
 export default function DashboardHome() {
+  const { user } = useAuth()
   const [dashboard, setDashboard] = useState(null)
 
   useEffect(() => {
@@ -68,7 +74,7 @@ export default function DashboardHome() {
           setDashboard(response.dashboard)
         }
       } catch (_error) {
-        // Preserve premium UI with static fallback when API is unavailable.
+        // Keep fallback values when API is unavailable.
       }
     }
 
@@ -95,7 +101,6 @@ export default function DashboardHome() {
 
   return (
     <motion.div variants={stagger} initial="initial" animate="animate" className="space-y-6">
-      {/* Welcome Banner */}
       <motion.div
         variants={fadeUp}
         className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-500 via-primary-600 to-accent-600 p-8 text-white"
@@ -109,10 +114,10 @@ export default function DashboardHome() {
               <span className="text-primary-100 text-sm font-medium">AI Ready</span>
             </div>
             <h2 className="font-display font-bold text-2xl sm:text-3xl mb-2">
-              Good morning, Rahul! 👋
+              Good morning, {firstName(user?.name)}! 👋
             </h2>
             <p className="text-primary-200 text-sm">
-              Your resume score is <strong className="text-white">87/100</strong>. You're 5 points away from the top 10% of candidates!
+              Your resume score is <strong className="text-white">{dashboard?.resumeScore ?? 87}/100</strong>. You're only a few points away from the top tier.
             </p>
           </div>
           <div className="flex gap-3 shrink-0">
@@ -126,14 +131,11 @@ export default function DashboardHome() {
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((s, i) => <StatCard key={i} {...s} />)}
       </div>
 
-      {/* Quick Actions + Recent Activity */}
       <div className="grid lg:grid-cols-2 gap-6">
-        {/* Quick Actions */}
         <div>
           <motion.h3 variants={fadeUp} className="font-display font-bold text-lg text-slate-800 mb-4">
             Quick Actions
@@ -146,7 +148,6 @@ export default function DashboardHome() {
           </div>
         </div>
 
-        {/* Recent Activity */}
         <div>
           <motion.h3 variants={fadeUp} className="font-display font-bold text-lg text-slate-800 mb-4">
             Recent Activity
@@ -170,7 +171,6 @@ export default function DashboardHome() {
         </div>
       </div>
 
-      {/* Score Progress */}
       <motion.div variants={fadeUp} className="glass-card p-6">
         <h3 className="font-display font-bold text-lg text-slate-800 mb-6">Resume Score Breakdown</h3>
         <div className="grid sm:grid-cols-2 gap-6">

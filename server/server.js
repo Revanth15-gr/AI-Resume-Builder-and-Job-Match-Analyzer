@@ -11,7 +11,6 @@ import jobRoutes from './routes/job.js'
 import analyticsRoutes from './routes/analytics.js'
 
 dotenv.config()
-
 const app = express()
 const PORT = env.PORT
 
