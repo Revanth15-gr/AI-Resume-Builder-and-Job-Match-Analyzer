@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Bell, CreditCard, Save, Camera, CheckCircle, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useNotifications } from '../../context/NotificationContext'
+import api from '../../lib/api'
 
 function SettingsSection({ title, children }) {
   return (
@@ -55,6 +56,10 @@ export default function DashboardSettings() {
   const [appearanceMode, setAppearanceMode] = useState('light')
   const [language, setLanguage] = useState('en-IN')
   const [avatarPreview, setAvatarPreview] = useState('')
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [passwordSaving, setPasswordSaving] = useState(false)
+  const [passwordSaved, setPasswordSaved] = useState(false)
+  const [passwordError, setPasswordError] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -137,6 +142,48 @@ export default function DashboardSettings() {
       notify({ type: 'error', title: 'Save Failed', message: err.message || 'Could not save settings.' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePasswordChange = async () => {
+    const currentPassword = passwordForm.currentPassword.trim()
+    const newPassword = passwordForm.newPassword.trim()
+    const confirmPassword = passwordForm.confirmPassword.trim()
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordError('Please fill all password fields.')
+      return
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters long.')
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirm password do not match.')
+      return
+    }
+
+    if (currentPassword === newPassword) {
+      setPasswordError('New password must be different from current password.')
+      return
+    }
+
+    try {
+      setPasswordSaving(true)
+      setPasswordError('')
+      await api.changePassword(currentPassword, newPassword)
+      setPasswordSaved(true)
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      notify({ type: 'success', title: 'Password Updated', message: 'Your password has been changed successfully.' })
+      setTimeout(() => setPasswordSaved(false), 2500)
+    } catch (err) {
+      const message = err.message || 'Could not update password.'
+      setPasswordError(message)
+      notify({ type: 'error', title: 'Password Update Failed', message })
+    } finally {
+      setPasswordSaving(false)
     }
   }
 
@@ -271,15 +318,45 @@ export default function DashboardSettings() {
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Current Password</label>
-              <input type="password" placeholder="Enter current password" className="input-glass" />
+              <input
+                type="password"
+                placeholder="Enter current password"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                className="input-glass"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">New Password</label>
-              <input type="password" placeholder="Enter new password" className="input-glass" />
+              <input
+                type="password"
+                placeholder="Enter new password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                className="input-glass"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Confirm Password</label>
-              <input type="password" placeholder="Confirm new password" className="input-glass" />
+              <input
+                type="password"
+                placeholder="Confirm new password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                className="input-glass"
+              />
+            </div>
+            {passwordError ? <p className="text-sm text-rose-600">{passwordError}</p> : null}
+            <div className="flex justify-end">
+              <button onClick={handlePasswordChange} disabled={passwordSaving} className={`btn-primary disabled:opacity-70 ${passwordSaved ? 'bg-emerald-500' : ''}`}>
+                {passwordSaved ? (
+                  <><CheckCircle className="w-4 h-4" /> Password Updated</>
+                ) : passwordSaving ? (
+                  <span className="inline-flex items-center gap-2"><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Updating...</span>
+                ) : (
+                  <>Update Password</>
+                )}
+              </button>
             </div>
           </div>
         </SettingsSection>

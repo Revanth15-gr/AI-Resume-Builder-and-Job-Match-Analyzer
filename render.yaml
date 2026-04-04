@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: ai-resume-builder-and-job-match-analyzer
+    env: node
+    plan: free
+    rootDir: .
+    buildCommand: |
+      npm install
+      npm run build
+      npm install --prefix server
+    startCommand: node server/server.js
+    healthCheckPath: /api/health
+    autoDeploy: true

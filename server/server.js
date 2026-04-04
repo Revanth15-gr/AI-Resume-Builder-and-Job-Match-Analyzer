@@ -3,6 +3,9 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { connectDB, isDbConnected } from './config/db.js'
 import { env } from './config/env.js'
 import authRoutes from './routes/auth.js'
@@ -13,6 +16,10 @@ import analyticsRoutes from './routes/analytics.js'
 dotenv.config()
 const app = express()
 const PORT = env.PORT
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const clientDistPath = path.resolve(__dirname, '../dist')
+const hasClientBuild = fs.existsSync(path.join(clientDistPath, 'index.html'))
 
 // Security middleware
 app.use(helmet())
@@ -35,6 +42,14 @@ app.get('/api/health', (req, res) => {
   const status = db === 'connected' || env.ALLOW_DB_OPTIONAL ? 'ok' : 'degraded'
   res.json({ status, db, timestamp: new Date().toISOString(), version: '1.0.0' })
 })
+
+if (hasClientBuild) {
+  app.use(express.static(clientDistPath))
+
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'))
+  })
+}
 
 // Error handler
 app.use((err, req, res, next) => {

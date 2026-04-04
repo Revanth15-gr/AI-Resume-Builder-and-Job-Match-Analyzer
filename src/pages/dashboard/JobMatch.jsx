@@ -112,8 +112,30 @@ export default function JobMatch() {
     try {
       const currentSkills = resumePayload.skills || { technical: [], tools: [], soft: [] }
       const technical = Array.from(new Set([...(currentSkills.technical || []), skill]))
-      await saveResume({ skills: { ...currentSkills, technical } })
-      setResult(prev => prev ? { ...prev, matchedSkills: Array.from(new Set([...(prev.matchedSkills || []), skill])), missingSkills: (prev.missingSkills || []).filter(item => item !== skill) } : prev)
+      const saved = await saveResume({ skills: { ...currentSkills, technical } })
+      if (jd.trim()) {
+        const rerun = await api.analyzeJob(jd, saved?.resume?._id || latestResume?._id, {
+          ...resumePayload,
+          skills: { ...currentSkills, technical },
+        })
+        if (rerun?.success) {
+          setResult((prev) => ({
+            ...prev,
+            matchScore: rerun.matchScore,
+            matchedSkills: rerun.matchedSkills || [],
+            missingSkills: rerun.missingSkills || [],
+            suggestions: rerun.aiSuggestions || prev?.suggestions || [],
+            actionItems: rerun.actionItems || prev?.actionItems || [],
+            keywordAnalysis: rerun.keywordAnalysis || prev?.keywordAnalysis || [],
+            keywords: {
+              found: rerun.matchedSkills || [],
+              missing: rerun.missingSkills || [],
+            },
+          }))
+        }
+      } else {
+        setResult(prev => prev ? { ...prev, matchedSkills: Array.from(new Set([...(prev.matchedSkills || []), skill])), missingSkills: (prev.missingSkills || []).filter(item => item !== skill) } : prev)
+      }
       notify({ type: 'success', title: 'Skill Added', message: `${skill} was added to your resume skills.` })
     } catch (err) {
       setError(err.message || 'Could not add skill')
@@ -162,7 +184,9 @@ export default function JobMatch() {
   const handleApplyAction = async (action) => {
     if (!action) return
     if (action.type === 'skills' && Array.isArray(action.skills) && action.skills.length) {
-      await handleApplySkill(action.skills[0])
+      for (const skill of action.skills) {
+        await handleApplySkill(skill)
+      }
       return
     }
 

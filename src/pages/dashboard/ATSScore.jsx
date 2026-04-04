@@ -135,15 +135,33 @@ export default function ATSScore() {
     { label: 'Readability', value: atsData?.readability || 0, color: '#8b5cf6', sublabel: 'Readability' },
   ]
 
+  const actionItems = useMemo(() => {
+    if (Array.isArray(atsData?.actionItems) && atsData.actionItems.length) return atsData.actionItems
+
+    return (atsData?.issues || []).map((issue) => ({
+      type: issue.severity === 'info' ? 'bullet' : 'summary',
+      label: issue.message,
+      details: issue.suggestion || 'No suggestion provided',
+      skills: [],
+    }))
+  }, [atsData])
+
   const issues = useMemo(() => {
+    const actionSkills = (actionItems || [])
+      .flatMap((item) => (Array.isArray(item.skills) ? item.skills : []))
+      .filter(Boolean)
+
     const mapped = (atsData?.issues || []).map((issue) => {
       const isPositive = issue.severity === 'info'
+      const issueText = `${issue.message || ''} ${issue.suggestion || ''}`.toLowerCase()
+      const mappedSkills = actionSkills.filter((skill) => issueText.includes(String(skill).toLowerCase()))
       return {
         severity: issue.severity,
         title: issue.message,
         desc: issue.suggestion || 'No suggestion provided',
         icon: isPositive ? CheckCircle : AlertTriangle,
         color: isPositive ? 'primary' : issue.severity === 'critical' ? 'rose' : 'orange',
+        skills: Array.from(new Set(mappedSkills)).slice(0, 3),
       }
     })
 
@@ -156,20 +174,10 @@ export default function ATSScore() {
             desc: 'Run a new scan with a job description to get recommendations.',
             icon: CheckCircle,
             color: 'primary',
+            skills: [],
           },
         ]
-  }, [atsData])
-
-  const actionItems = useMemo(() => {
-    if (Array.isArray(atsData?.actionItems) && atsData.actionItems.length) return atsData.actionItems
-
-    return issues.map((issue) => ({
-      type: issue.severity === 'info' ? 'bullet' : 'summary',
-      label: issue.title,
-      details: issue.desc,
-      skills: [],
-    }))
-  }, [atsData, issues])
+  }, [atsData, actionItems])
 
   const atsSystems = [
     { name: 'Workday', score: atsData?.platformScores?.workday || 0, logo: '🔵' },
@@ -212,6 +220,22 @@ export default function ATSScore() {
     } finally {
       setOptimizing(false)
     }
+  }
+
+  const handleFixIssue = async (issue) => {
+    if (Array.isArray(issue?.skills) && issue.skills.length) {
+      await handleApplySkill(issue.skills[0])
+      return
+    }
+    await handleAutoOptimize()
+  }
+
+  const handleApplyAction = async (item) => {
+    if (Array.isArray(item?.skills) && item.skills.length) {
+      await handleApplySkill(item.skills[0])
+      return
+    }
+    await handleAutoOptimize()
   }
 
   const handleAutoOptimize = async () => {
@@ -366,7 +390,7 @@ export default function ATSScore() {
                   <p className="text-xs mt-0.5 opacity-80">{issue.desc}</p>
                 </div>
                 {issue.severity !== 'good' && (
-                  <button onClick={handleAutoOptimize} className="ml-auto shrink-0 text-xs font-semibold px-3 py-1.5 bg-white/60 rounded-lg hover:bg-white transition-colors">
+                  <button onClick={() => handleFixIssue(issue)} className="ml-auto shrink-0 text-xs font-semibold px-3 py-1.5 bg-white/60 rounded-lg hover:bg-white transition-colors">
                     Fix Now
                   </button>
                 )}
@@ -398,7 +422,7 @@ export default function ATSScore() {
                   </div>
                 )}
               </div>
-              <button onClick={handleAutoOptimize} disabled={optimizing} className="shrink-0 text-xs font-semibold px-3 py-1.5 bg-white rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60">
+              <button onClick={() => handleApplyAction(item)} disabled={optimizing} className="shrink-0 text-xs font-semibold px-3 py-1.5 bg-white rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60">
                 Apply
               </button>
             </div>

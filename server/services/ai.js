@@ -54,6 +54,131 @@ const TECH_KEYWORDS = {
   'mobile': ['React Native', 'Flutter', 'Swift', 'Kotlin', 'iOS', 'Android', 'Expo'],
 }
 
+const EXTRA_KEYWORDS = [
+  'C++',
+  'C#',
+  '.NET',
+  'Machine Learning',
+  'Deep Learning',
+  'NLP',
+  'LLM',
+  'LangChain',
+  'OpenAI',
+  'RAG',
+  'Prompt Engineering',
+  'Jest',
+  'Cypress',
+  'Playwright',
+  'Selenium',
+  'Postman',
+  'Linux',
+  'Bash',
+  'Shell Scripting',
+  'System Design',
+  'OOP',
+  'Data Structures',
+  'Algorithms',
+]
+
+const SKILL_ALIASES = {
+  JavaScript: ['javascript', 'js', 'ecmascript'],
+  TypeScript: ['typescript', 'ts'],
+  'Node.js': ['node', 'nodejs', 'node.js'],
+  React: ['react', 'reactjs', 'react.js'],
+  'Next.js': ['next', 'nextjs', 'next.js'],
+  'Vue.js': ['vue', 'vuejs', 'vue.js'],
+  'REST API': ['rest', 'rest api', 'restful api', 'restful'],
+  GraphQL: ['graphql', 'graph ql'],
+  MongoDB: ['mongodb', 'mongo'],
+  PostgreSQL: ['postgresql', 'postgres'],
+  'CI/CD': ['ci/cd', 'ci cd', 'continuous integration', 'continuous deployment'],
+  Docker: ['docker', 'containerization'],
+  Kubernetes: ['kubernetes', 'k8s'],
+  AWS: ['aws', 'amazon web services'],
+  Azure: ['azure', 'microsoft azure'],
+  GCP: ['gcp', 'google cloud', 'google cloud platform'],
+  Python: ['python', 'py'],
+  Git: ['git', 'github', 'gitlab'],
+  'React Native': ['react native', 'rn'],
+}
+
+const JD_STOP_WORDS = new Set([
+  'and', 'or', 'the', 'with', 'for', 'from', 'into', 'that', 'this', 'have', 'has', 'will', 'you', 'your', 'our',
+  'are', 'is', 'was', 'were', 'be', 'been', 'being', 'can', 'could', 'should', 'would', 'must', 'able', 'ability',
+  'experience', 'years', 'year', 'role', 'team', 'work', 'working', 'strong', 'good', 'excellent', 'skills', 'skill',
+  'developer', 'engineer', 'development', 'design', 'build', 'building', 'knowledge', 'understanding', 'required',
+  'preferred', 'plus', 'nice', 'to', 'in', 'on', 'at', 'by', 'as', 'an', 'a', 'of', 'using', 'use', 'hands', 'handson',
+  'communication', 'problem', 'solving', 'collaboration', 'agile',
+])
+
+const KEYWORD_CATALOG = [...new Set([...Object.values(TECH_KEYWORDS).flat(), ...EXTRA_KEYWORDS])]
+
+function escapeRegex(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function normalizeText(value = '') {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9+#.\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function canonicalizeSkill(skill = '') {
+  const normalized = normalizeText(skill)
+  if (!normalized) return ''
+
+  for (const [canonical, aliases] of Object.entries(SKILL_ALIASES)) {
+    if (aliases.some((alias) => normalized === normalizeText(alias))) return canonical
+  }
+
+  const exact = KEYWORD_CATALOG.find((item) => normalizeText(item) === normalized)
+  return exact || String(skill).trim()
+}
+
+function containsSkill(text = '', skill = '') {
+  const normalizedText = normalizeText(text)
+  const canonical = canonicalizeSkill(skill)
+  if (!canonical || !normalizedText) return false
+
+  const aliases = [canonical, ...(SKILL_ALIASES[canonical] || [])]
+  return aliases.some((alias) => {
+    const normalizedAlias = normalizeText(alias)
+    if (!normalizedAlias) return false
+    const pattern = new RegExp(`(^|[^a-z0-9+#.])${escapeRegex(normalizedAlias)}($|[^a-z0-9+#.])`, 'i')
+    return pattern.test(normalizedText)
+  })
+}
+
+function uniqueCanonicalSkills(skills = []) {
+  const seen = new Set()
+  const result = []
+  skills.forEach((skill) => {
+    const canonical = canonicalizeSkill(skill)
+    if (!canonical) return
+    const key = canonical.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(canonical)
+  })
+  return result
+}
+
+function extractCandidateTerms(text = '') {
+  const tokens = normalizeText(text).split(/\s+/).filter(Boolean)
+  const terms = []
+  for (let i = 0; i < tokens.length; i++) {
+    const one = tokens[i]
+    if (one.length > 2 && !JD_STOP_WORDS.has(one)) terms.push(one)
+    if (i + 1 < tokens.length) {
+      const two = `${tokens[i]} ${tokens[i + 1]}`
+      if (two.length > 5 && !JD_STOP_WORDS.has(tokens[i]) && !JD_STOP_WORDS.has(tokens[i + 1])) terms.push(two)
+    }
+  }
+  return terms
+}
+
 function normalizeResumePayload(resume = {}) {
   const personal = resume.personal || {
     name: resume.name || '',
@@ -81,6 +206,15 @@ function buildActionItems(missingSkills = [], matchedSkills = []) {
   const items = []
 
   if (missingSkills.length) {
+    missingSkills.slice(0, 4).forEach((skill) => {
+      items.push({
+        type: 'skills',
+        label: `Add ${skill} to your resume`,
+        details: `${skill} appears in the job description but is missing in your profile.`,
+        skills: [skill],
+      })
+    })
+
     items.push({
       type: 'skills',
       label: `Add ${missingSkills.slice(0, 3).join(', ')} to your resume`,
@@ -159,6 +293,10 @@ export async function analyzeATS(resume, jobDescription = '') {
   const normalized = normalizeResumePayload(resume)
   const { personal, experience, skills, education } = normalized
   const allSkills = getAllSkills(skills)
+  const resumeText = JSON.stringify(normalized)
+  const jdKeywords = jobDescription ? extractJDKeywords(jobDescription) : []
+  const matchedFromResume = jdKeywords.filter((skill) => containsSkill(resumeText, skill))
+  const missingFromResume = jdKeywords.filter((skill) => !containsSkill(resumeText, skill))
 
   const prompt = `You are an ATS (Applicant Tracking System) expert. Analyze this resume against ${jobDescription ? 'the given job description' : 'general ATS standards'}.
 
@@ -190,14 +328,19 @@ Be realistic with scores. Return ONLY valid JSON.`
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0])
+        const fallback = localAnalyzeATS(normalized, jobDescription)
+        const issues = Array.isArray(parsed.issues) && parsed.issues.length ? parsed.issues : fallback.issues
+        const actionItems = Array.isArray(parsed.actionItems) && parsed.actionItems.length
+          ? parsed.actionItems
+          : buildActionItems(missingFromResume, matchedFromResume)
         return {
-          overall: parsed.overall || 70,
-          keywordDensity: parsed.keywordDensity || 65,
-          formatScore: parsed.formatScore || 80,
-          readability: parsed.readability || 75,
-          issues: parsed.issues || [],
-          actionItems: parsed.actionItems || buildActionItems([], []),
-          platformScores: parsed.platformScores || {},
+          overall: Number.isFinite(parsed.overall) ? parsed.overall : fallback.overall,
+          keywordDensity: Number.isFinite(parsed.keywordDensity) ? parsed.keywordDensity : fallback.keywordDensity,
+          formatScore: Number.isFinite(parsed.formatScore) ? parsed.formatScore : fallback.formatScore,
+          readability: Number.isFinite(parsed.readability) ? parsed.readability : fallback.readability,
+          issues,
+          actionItems,
+          platformScores: parsed.platformScores || fallback.platformScores,
         }
       }
     } catch (e) {
@@ -252,13 +395,34 @@ Be accurate with skill matching. Return ONLY valid JSON.`
       const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0])
+        const fallback = localAnalyzeJobMatch(jobDescription, resumeSkills)
+        const matchedSkills = uniqueCanonicalSkills(parsed.matchedSkills || [])
+        const missingSkills = uniqueCanonicalSkills(parsed.missingSkills || [])
+        const useFallback = matchedSkills.length === 0 && missingSkills.length === 0
+        const finalMatchedSkills = useFallback ? fallback.matchedSkills : matchedSkills
+        const finalMissingSkills = useFallback ? fallback.missingSkills : missingSkills
+        const finalActionItems = Array.isArray(parsed.actionItems) && parsed.actionItems.length
+          ? parsed.actionItems
+          : buildActionItems(finalMissingSkills, finalMatchedSkills)
+
+        const denominator = finalMatchedSkills.length + finalMissingSkills.length
+        const deterministicScore = denominator > 0 ? Math.round((finalMatchedSkills.length / denominator) * 100) : 0
+
         return {
-          matchScore: parsed.matchScore || 60,
-          matchedSkills: parsed.matchedSkills || [],
-          missingSkills: parsed.missingSkills || [],
-          aiSuggestions: parsed.aiSuggestions || [],
-          actionItems: parsed.actionItems || buildActionItems(parsed.missingSkills || [], parsed.matchedSkills || []),
-          keywordAnalysis: parsed.keywordAnalysis || [],
+          matchScore: useFallback
+            ? fallback.matchScore
+            : Number.isFinite(parsed.matchScore) && parsed.matchScore >= 0 && parsed.matchScore <= 100
+              ? parsed.matchScore
+              : deterministicScore,
+          matchedSkills: finalMatchedSkills,
+          missingSkills: finalMissingSkills,
+          aiSuggestions: Array.isArray(parsed.aiSuggestions) && parsed.aiSuggestions.length
+            ? parsed.aiSuggestions
+            : fallback.aiSuggestions,
+          actionItems: finalActionItems,
+          keywordAnalysis: Array.isArray(parsed.keywordAnalysis) && parsed.keywordAnalysis.length
+            ? parsed.keywordAnalysis
+            : fallback.keywordAnalysis,
         }
       }
     } catch (e) {
@@ -374,7 +538,7 @@ function localAnalyzeATS(resume, jobDescription) {
   const allSkills = getAllSkills(resume.skills || {})
   const allText = JSON.stringify(resume).toLowerCase()
   const jdKeywords = jobDescription ? extractJDKeywords(jobDescription) : ['JavaScript', 'React', 'Node.js', 'Python', 'SQL', 'Git', 'REST API', 'CI/CD', 'Docker', 'AWS']
-  const found = jdKeywords.filter(kw => allText.includes(kw.toLowerCase()))
+  const found = jdKeywords.filter((kw) => containsSkill(allText, kw))
   const keywordScore = Math.min(100, Math.round((found.length / Math.max(jdKeywords.length, 1)) * 100))
   const sections = { summary: !!resume.personal?.summary, education: resume.education?.length > 0, experience: resume.experience?.length > 0, skills: allSkills.length > 0 }
   const sectionCount = Object.values(sections).filter(Boolean).length
@@ -390,20 +554,35 @@ function localAnalyzeATS(resume, jobDescription) {
 
 function localAnalyzeJobMatch(jobDescription, resumeSkills) {
   const jdKeywords = extractJDKeywords(jobDescription)
-  const matchedSkills = resumeSkills.filter(skill => jdKeywords.some(kw => kw.toLowerCase().includes(skill.toLowerCase()) || skill.toLowerCase().includes(kw.toLowerCase())))
-  const missingSkills = jdKeywords.filter(kw => !resumeSkills.some(skill => kw.toLowerCase().includes(skill.toLowerCase()) || skill.toLowerCase().includes(kw.toLowerCase()))).slice(0, 8)
-  const matchScore = Math.min(98, Math.round((matchedSkills.length / Math.max(jdKeywords.length, 1)) * 100) + 15)
+  const canonicalResumeSkills = uniqueCanonicalSkills(resumeSkills)
+  const matchedSkills = uniqueCanonicalSkills(jdKeywords.filter((skill) => canonicalResumeSkills.some((entry) => containsSkill(entry, skill) || containsSkill(skill, entry))))
+  const missingSkills = uniqueCanonicalSkills(jdKeywords.filter((skill) => !canonicalResumeSkills.some((entry) => containsSkill(entry, skill) || containsSkill(skill, entry)))).slice(0, 10)
+  const denominator = matchedSkills.length + missingSkills.length
+  const matchScore = denominator > 0 ? Math.round((matchedSkills.length / denominator) * 100) : 0
+
+  const importanceHigh = new Set(['React', 'TypeScript', 'Node.js', 'Python', 'AWS', 'Docker', 'Kubernetes', 'GraphQL', 'MongoDB', 'PostgreSQL'])
   return {
     matchScore,
     matchedSkills,
     missingSkills,
     aiSuggestions: [`Add ${missingSkills.slice(0, 3).join(', ')} to your skills`, 'Tailor your summary to match the role', 'Include relevant certifications'],
     actionItems: buildActionItems(missingSkills, matchedSkills),
-    keywordAnalysis: jdKeywords.map(kw => ({ keyword: kw, found: matchedSkills.some(s => s.toLowerCase() === kw.toLowerCase()), importance: 'medium' })),
+    keywordAnalysis: jdKeywords.map((kw) => ({
+      keyword: kw,
+      found: matchedSkills.some((s) => s.toLowerCase() === kw.toLowerCase()),
+      importance: importanceHigh.has(kw) ? 'high' : 'medium',
+    })),
   }
 }
 
 function extractJDKeywords(text) {
-  const allKeywords = Object.values(TECH_KEYWORDS).flat()
-  return allKeywords.filter(kw => text.toLowerCase().includes(kw.toLowerCase()))
+  const explicit = KEYWORD_CATALOG.filter((keyword) => containsSkill(text, keyword))
+  const candidateTerms = extractCandidateTerms(text)
+  const inferred = candidateTerms.filter((term) => {
+    if (term.length < 3 || term.length > 35) return false
+    if (JD_STOP_WORDS.has(term)) return false
+    return term.includes('+') || term.includes('#') || /^[a-z][a-z0-9.\- ]+$/.test(term)
+  })
+
+  return uniqueCanonicalSkills([...explicit, ...inferred]).slice(0, 30)
 }
