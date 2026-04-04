@@ -22,6 +22,7 @@ const userSchema = new mongoose.Schema({
       interviewReminders: { type: Boolean, default: true },
       marketing: { type: Boolean, default: false },
     },
+    mode: { type: String, enum: ['light', 'dark'], default: 'light' },
     theme: { type: String, default: 'emerald' },
     language: { type: String, default: 'en-IN' },
   },

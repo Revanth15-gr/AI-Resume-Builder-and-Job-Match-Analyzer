@@ -1,29 +1,85 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Target, Sparkles, CheckCircle, XCircle, AlertCircle, Loader2, Copy, BarChart3 } from 'lucide-react'
+import { Target, Sparkles, CheckCircle, XCircle, AlertCircle, Loader2, Copy, WandSparkles, Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import { useNotifications } from '../../context/NotificationContext'
 import api from '../../lib/api'
 
 export default function JobMatch() {
+  const { user } = useAuth()
+  const { notify } = useNotifications()
   const [jd, setJd] = useState('')
   const [analyzing, setAnalyzing] = useState(false)
+  const [loadingResume, setLoadingResume] = useState(true)
+  const [latestResume, setLatestResume] = useState(null)
+  const [applying, setApplying] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadLatestResume() {
+      try {
+        const response = await api.getLatestResume()
+        if (!mounted) return
+        setLatestResume(response?.resume || null)
+      } catch (_err) {
+        if (mounted) setLatestResume(null)
+      } finally {
+        if (mounted) setLoadingResume(false)
+      }
+    }
+
+    loadLatestResume()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const resumePayload = useMemo(() => {
+    const resume = latestResume || {}
+    const personal = resume.personal || {
+      name: resume.name || user?.name || '',
+      email: resume.email || user?.email || '',
+      phone: resume.phone || user?.phone || '',
+      location: resume.location || user?.location || '',
+      linkedin: resume.linkedin || '',
+      portfolio: resume.portfolio || '',
+      summary: resume.summary || user?.currentRole || '',
+    }
+
+    return {
+      personal,
+      education: Array.isArray(resume.education) ? resume.education : [],
+      experience: Array.isArray(resume.experience) ? resume.experience : [],
+      skills: resume.skills || { technical: [], tools: [], soft: [] },
+    }
+  }, [latestResume, user])
+
+  const saveResume = async (updates) => {
+    if (latestResume?._id) {
+      const response = await api.updateResume(latestResume._id, updates)
+      setLatestResume(response?.resume || latestResume)
+      return response
+    }
+
+    const response = await api.createResume({
+      title: 'Job Match Resume',
+      template: latestResume?.template || 'modern-pro',
+      ...resumePayload,
+      ...updates,
+    })
+    setLatestResume(response?.resume || null)
+    return response
+  }
 
   const handleAnalyze = async () => {
     if (!jd.trim()) return
     setAnalyzing(true)
     setError('')
     try {
-      let json
-      try {
-        json = await api.analyzeJob(jd)
-      } catch (routeError) {
-        // Fallback route to keep experience available during optional DB mode.
-        json = await api.matchDirect(
-          jd,
-          ['React', 'Node.js', 'JavaScript', 'MongoDB', 'Python', 'REST API', 'Git', 'Docker', 'AWS']
-        )
-      }
+      const json = await api.analyzeJob(jd, latestResume?._id, resumePayload)
 
       if (json.success) {
         setResult({
@@ -31,31 +87,90 @@ export default function JobMatch() {
           matchedSkills: json.matchedSkills || [],
           missingSkills: json.missingSkills || [],
           suggestions: json.aiSuggestions || [],
+          actionItems: json.actionItems || [],
+          keywordAnalysis: json.keywordAnalysis || [],
           keywords: {
             found: json.matchedSkills || [],
             missing: json.missingSkills || [],
           },
         })
+        notify({ type: 'match', title: 'Job Match Updated', message: `Match score calculated: ${json.matchScore || 0}%` })
       } else {
         setError(json.message || 'Analysis failed')
       }
     } catch (err) {
       console.error(err)
-      // Fallback to local
-      setResult({
-        matchScore: 78,
-        matchedSkills: ['React', 'Node.js', 'JavaScript', 'REST API', 'Git'],
-        missingSkills: ['TypeScript', 'Kubernetes', 'GraphQL'],
-        suggestions: ['Add TypeScript', 'Mention GraphQL experience', 'Add metrics', 'Include certifications'],
-        keywords: { found: ['React', 'Node.js', 'JavaScript'], missing: ['TypeScript', 'Kubernetes'] },
-      })
+      setError(err.message || 'Analysis failed')
     }
     setAnalyzing(false)
   }
 
+  const handleApplySkill = async (skill) => {
+    if (!skill) return
+    setApplying(true)
+    setError('')
+    try {
+      const currentSkills = resumePayload.skills || { technical: [], tools: [], soft: [] }
+      const technical = Array.from(new Set([...(currentSkills.technical || []), skill]))
+      await saveResume({ skills: { ...currentSkills, technical } })
+      setResult(prev => prev ? { ...prev, matchedSkills: Array.from(new Set([...(prev.matchedSkills || []), skill])), missingSkills: (prev.missingSkills || []).filter(item => item !== skill) } : prev)
+      notify({ type: 'success', title: 'Skill Added', message: `${skill} was added to your resume skills.` })
+    } catch (err) {
+      setError(err.message || 'Could not add skill')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const handleAutoOptimize = async () => {
+    setApplying(true)
+    setError('')
+    try {
+      const generatedResponse = await api.generateResumeAI({
+        personal: resumePayload.personal,
+        education: resumePayload.education,
+        experience: resumePayload.experience,
+        skills: resumePayload.skills,
+        template: latestResume?.template || 'modern-pro',
+        jobDescription: jd,
+      })
+      const generated = generatedResponse?.generated || generatedResponse || {}
+
+      const optimized = {
+        personal: {
+          ...resumePayload.personal,
+          summary: generated?.summary || resumePayload.personal.summary,
+        },
+        education: generated?.education?.length ? generated.education : resumePayload.education,
+        experience: generated?.experience?.length ? generated.experience : resumePayload.experience,
+        skills: generated?.skills || resumePayload.skills,
+      }
+
+      await saveResume(optimized)
+      setResult(prev => prev ? {
+        ...prev,
+        suggestions: ['Resume optimized from your profile and job description.', ...(prev.suggestions || [])],
+      } : prev)
+      notify({ type: 'success', title: 'Resume Optimized', message: 'AI optimization completed for this job description.' })
+    } catch (err) {
+      setError(err.message || 'Auto optimize failed')
+    } finally {
+      setApplying(false)
+    }
+  }
+
+  const handleApplyAction = async (action) => {
+    if (!action) return
+    if (action.type === 'skills' && Array.isArray(action.skills) && action.skills.length) {
+      await handleApplySkill(action.skills[0])
+      return
+    }
+
+    await handleAutoOptimize()
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      {/* Header */}
       <div className="glass-card p-6">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center">
@@ -63,12 +178,13 @@ export default function JobMatch() {
           </div>
           <div>
             <h2 className="font-display font-bold text-xl text-slate-800">Job Match Analyzer</h2>
-            <p className="text-sm text-slate-400">Paste a job description to see how well your resume matches</p>
+            <p className="text-sm text-slate-400">
+              {loadingResume ? 'Loading your latest resume...' : latestResume?._id ? 'Using your latest saved resume plus profile data' : 'Using your profile data until a resume is saved'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Input */}
       <div className="glass-card p-6">
         <div className="flex items-center justify-between mb-3">
           <label className="text-sm font-bold text-slate-700 uppercase tracking-wide">Job Description</label>
@@ -92,10 +208,8 @@ export default function JobMatch() {
         </button>
       </div>
 
-      {/* Results */}
       {result && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          {/* Score Circle */}
           <div className="glass-card p-8 text-center">
             <div className="relative inline-block mb-4">
               <svg width="140" height="140" viewBox="0 0 140 140">
@@ -113,7 +227,6 @@ export default function JobMatch() {
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="font-display font-extrabold text-4xl text-slate-900">{result.matchScore}%</span>
-                <span className="text-xs text-slate-400">Match Score</span>
               </div>
             </div>
             <h3 className="font-display font-bold text-xl text-slate-800">
@@ -143,27 +256,55 @@ export default function JobMatch() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {result.missingSkills.map(s => (
-                  <span key={s} className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold border border-rose-100">
-                    <XCircle className="w-3 h-3" /> {s}
-                  </span>
+                  <button
+                    key={s}
+                    onClick={() => handleApplySkill(s)}
+                    disabled={applying}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 bg-rose-50 text-rose-600 rounded-lg text-xs font-semibold border border-rose-100 hover:bg-rose-100 transition-colors disabled:opacity-60"
+                  >
+                    <Plus className="w-3 h-3" /> {s}
+                  </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Suggestions */}
           <div className="glass-card p-6">
             <div className="flex items-center gap-2 mb-4">
               <Sparkles className="w-5 h-5 text-accent-500" /><h3 className="font-bold text-slate-800">AI Suggestions</h3>
             </div>
+            <div className="space-y-3 mb-5">
+              {(result.actionItems || []).map((item, i) => (
+                <div key={i} className="flex items-start gap-3 p-4 bg-accent-50 rounded-xl border border-accent-100">
+                  <WandSparkles className="w-4 h-4 text-accent-500 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                    <p className="text-xs text-slate-500 mt-1">{item.details}</p>
+                  </div>
+                  <button onClick={() => handleApplyAction(item)} disabled={applying} className="shrink-0 text-xs font-semibold px-3 py-1.5 bg-white rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60">
+                    Fix Now
+                  </button>
+                </div>
+              ))}
+            </div>
             <div className="space-y-3">
               {result.suggestions.map((sug, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 bg-accent-50 rounded-xl border border-accent-100">
+                <div key={i} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <AlertCircle className="w-4 h-4 text-accent-500 shrink-0 mt-0.5" />
                   <p className="text-sm text-slate-700">{sug}</p>
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="glass-card p-6 text-center border-primary-100 bg-gradient-to-br from-primary-50/50 to-accent-50/50">
+            <Sparkles className="w-8 h-8 text-primary-500 mx-auto mb-3" />
+            <h3 className="font-display font-bold text-lg text-slate-800 mb-2">Need the whole resume updated?</h3>
+            <p className="text-slate-400 text-sm mb-4">Auto-optimize will use your current resume, the job description, and your profile data.</p>
+            <button onClick={handleAutoOptimize} disabled={applying} className="btn-primary mx-auto disabled:opacity-60">
+              {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
+              Auto-Optimize with AI
+            </button>
           </div>
         </motion.div>
       )}

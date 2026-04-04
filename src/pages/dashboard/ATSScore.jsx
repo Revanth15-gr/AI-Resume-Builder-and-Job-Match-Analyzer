@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { BarChart3, TrendingUp, AlertTriangle, CheckCircle, Sparkles, ArrowUp, Loader2 } from 'lucide-react'
+import { BarChart3, TrendingUp, AlertTriangle, CheckCircle, Sparkles, ArrowUp, Loader2, WandSparkles, Plus } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
+import { useNotifications } from '../../context/NotificationContext'
 import api from '../../lib/api'
 
 function CircleGauge({ value, size = 160, color = '#10b981', label, sublabel }) {
@@ -37,30 +39,104 @@ function CircleGauge({ value, size = 160, color = '#10b981', label, sublabel }) 
 }
 
 export default function ATSScore() {
+  const { user } = useAuth()
+  const { notify } = useNotifications()
   const [jobDescription, setJobDescription] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [optimizing, setOptimizing] = useState(false)
   const [error, setError] = useState('')
-  const [atsData, setAtsData] = useState({
-    overall: 87,
-    keywordDensity: 74,
-    formatScore: 92,
-    readability: 81,
-    issues: [
-      { severity: 'warning', message: 'Add more role-specific keywords for higher ATS relevance.', suggestion: 'Include 5 to 7 exact skills from the JD.' },
-      { severity: 'info', message: 'Resume is readable and cleanly structured.', suggestion: 'Keep section headings concise.' },
-    ],
-    platformScores: { naukri: 94, linkedin: 88, indeed: 84, workday: 82, greenhouse: 86 },
-  })
+  const [latestResume, setLatestResume] = useState(null)
+  const [atsData, setAtsData] = useState(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadResumeAndScan() {
+      try {
+        const latest = await api.getLatestResume()
+        if (!mounted) return
+        setLatestResume(latest?.resume || null)
+        await runScan(latest?.resume || null, '')
+      } catch (scanError) {
+        if (mounted) setError(scanError.message || 'Failed to load resume')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+
+    loadResumeAndScan()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const resumePayload = useMemo(() => {
+    const resume = latestResume || {}
+    const personal = resume.personal || {
+      name: resume.name || user?.name || '',
+      email: resume.email || user?.email || '',
+      phone: resume.phone || user?.phone || '',
+      location: resume.location || user?.location || '',
+      linkedin: resume.linkedin || '',
+      portfolio: resume.portfolio || '',
+      summary: resume.summary || user?.currentRole || '',
+    }
+
+    return {
+      personal,
+      education: Array.isArray(resume.education) ? resume.education : [],
+      experience: Array.isArray(resume.experience) ? resume.experience : [],
+      skills: resume.skills || { technical: [], tools: [], soft: [] },
+    }
+  }, [latestResume, user])
+
+  const saveResume = async (updates) => {
+    if (latestResume?._id) {
+      const response = await api.updateResume(latestResume._id, updates)
+      setLatestResume(response?.resume || latestResume)
+      return response
+    }
+
+    const response = await api.createResume({
+      title: 'ATS Optimization Resume',
+      template: latestResume?.template || 'modern-pro',
+      ...resumePayload,
+      ...updates,
+    })
+    setLatestResume(response?.resume || null)
+    return response
+  }
+
+  async function runScan(resumeOverride, jobOverride) {
+    const sourceResume = resumeOverride || latestResume
+    const jd = typeof jobOverride === 'string' ? jobOverride : jobDescription
+
+    if (sourceResume?._id) {
+      const response = await api.scanATS(sourceResume._id, jd)
+      if (response?.success && response.atsScore) setAtsData(response.atsScore)
+      if (response?.success && response.atsScore) {
+        notify({ type: 'ats', title: 'ATS Scan Complete', message: `Current ATS score: ${response.atsScore.overall || 0}/100` })
+      }
+      return response
+    }
+
+    const response = await api.atsScanDirect(resumePayload, jd)
+    if (response?.success && response.atsScore) setAtsData(response.atsScore)
+    if (response?.success && response.atsScore) {
+      notify({ type: 'ats', title: 'ATS Scan Complete', message: `Current ATS score: ${response.atsScore.overall || 0}/100` })
+    }
+    return response
+  }
 
   const scores = [
-    { label: 'Overall ATS Score', value: atsData.overall || 0, color: '#10b981', sublabel: (atsData.overall || 0) >= 85 ? 'Excellent' : 'Good' },
-    { label: 'Keyword Density', value: atsData.keywordDensity || 0, color: '#6366f1', sublabel: 'Keyword Match' },
-    { label: 'Format Score', value: atsData.formatScore || 0, color: '#f59e0b', sublabel: 'Formatting' },
-    { label: 'Readability', value: atsData.readability || 0, color: '#8b5cf6', sublabel: 'Readability' },
+    { label: 'Overall ATS Score', value: atsData?.overall || 0, color: '#10b981', sublabel: (atsData?.overall || 0) >= 85 ? 'Excellent' : 'Good' },
+    { label: 'Keyword Density', value: atsData?.keywordDensity || 0, color: '#6366f1', sublabel: 'Keyword Match' },
+    { label: 'Format Score', value: atsData?.formatScore || 0, color: '#f59e0b', sublabel: 'Formatting' },
+    { label: 'Readability', value: atsData?.readability || 0, color: '#8b5cf6', sublabel: 'Readability' },
   ]
 
   const issues = useMemo(() => {
-    const mapped = (atsData.issues || []).map((issue) => {
+    const mapped = (atsData?.issues || []).map((issue) => {
       const isPositive = issue.severity === 'info'
       return {
         severity: issue.severity,
@@ -84,13 +160,24 @@ export default function ATSScore() {
         ]
   }, [atsData])
 
+  const actionItems = useMemo(() => {
+    if (Array.isArray(atsData?.actionItems) && atsData.actionItems.length) return atsData.actionItems
+
+    return issues.map((issue) => ({
+      type: issue.severity === 'info' ? 'bullet' : 'summary',
+      label: issue.title,
+      details: issue.desc,
+      skills: [],
+    }))
+  }, [atsData, issues])
+
   const atsSystems = [
-    { name: 'Workday', score: atsData.platformScores?.workday || 0, logo: '🔵' },
-    { name: 'Greenhouse', score: atsData.platformScores?.greenhouse || 0, logo: '🟢' },
-    { name: 'Lever', score: atsData.platformScores?.linkedin || 0, logo: '🟡' },
-    { name: 'Taleo (Oracle)', score: atsData.platformScores?.indeed || 0, logo: '🔴' },
-    { name: 'iCIMS', score: atsData.platformScores?.linkedin || 0, logo: '🟠' },
-    { name: 'Naukri ATS', score: atsData.platformScores?.naukri || 0, logo: '🇮🇳' },
+    { name: 'Workday', score: atsData?.platformScores?.workday || 0, logo: '🔵' },
+    { name: 'Greenhouse', score: atsData?.platformScores?.greenhouse || 0, logo: '🟢' },
+    { name: 'Lever', score: atsData?.platformScores?.linkedin || 0, logo: '🟡' },
+    { name: 'Taleo (Oracle)', score: atsData?.platformScores?.indeed || 0, logo: '🔴' },
+    { name: 'iCIMS', score: atsData?.platformScores?.linkedin || 0, logo: '🟠' },
+    { name: 'Naukri ATS', score: atsData?.platformScores?.naukri || 0, logo: '🇮🇳' },
   ]
 
   const handleRunScan = async () => {
@@ -98,28 +185,7 @@ export default function ATSScore() {
     setError('')
 
     try {
-      const latest = await api.getLatestResume()
-      let response
-
-      if (latest?.resume?._id) {
-        response = await api.scanATS(latest.resume._id, jobDescription)
-        if (response?.success && response.atsScore) {
-          setAtsData(response.atsScore)
-        }
-      } else {
-        response = await api.atsScanDirect(
-          {
-            personal: {},
-            experience: [],
-            skills: { technical: [], tools: [], soft: [] },
-            education: [],
-          },
-          jobDescription
-        )
-        if (response?.success && response.atsScore) {
-          setAtsData(response.atsScore)
-        }
-      }
+      await runScan(latestResume, jobDescription)
     } catch (scanError) {
       setError(scanError.message || 'Failed to run ATS scan')
     } finally {
@@ -127,9 +193,71 @@ export default function ATSScore() {
     }
   }
 
+  const handleApplySkill = async (skill) => {
+    if (!skill) return
+    setOptimizing(true)
+    setError('')
+    try {
+      const skills = resumePayload.skills || { technical: [], tools: [], soft: [] }
+      const nextSkills = {
+        ...skills,
+        technical: Array.from(new Set([...(skills.technical || []), skill])),
+      }
+
+      const saved = await saveResume({ skills: nextSkills })
+      await runScan(saved?.resume || latestResume, jobDescription)
+      notify({ type: 'success', title: 'Fix Applied', message: `${skill} added to resume skills.` })
+    } catch (fixError) {
+      setError(fixError.message || 'Could not apply fix')
+    } finally {
+      setOptimizing(false)
+    }
+  }
+
+  const handleAutoOptimize = async () => {
+    setOptimizing(true)
+    setError('')
+    try {
+      const generatedResponse = await api.generateResumeAI({
+        personal: resumePayload.personal,
+        education: resumePayload.education,
+        experience: resumePayload.experience,
+        skills: resumePayload.skills,
+        template: latestResume?.template || 'modern-pro',
+        jobDescription,
+      })
+      const generated = generatedResponse?.generated || generatedResponse || {}
+
+      const saved = await saveResume({
+        personal: {
+          ...resumePayload.personal,
+          summary: generated?.summary || resumePayload.personal.summary,
+        },
+        education: generated?.education?.length ? generated.education : resumePayload.education,
+        experience: generated?.experience?.length ? generated.experience : resumePayload.experience,
+        skills: generated?.skills || resumePayload.skills,
+        aiGenerated: {
+          summary: generated?.summary || resumePayload.personal.summary || '',
+          bulletPoints: generated?.experience?.[0]?.bullets || [],
+          keywords: [
+            ...(generated?.skills?.technical || []),
+            ...(generated?.skills?.tools || []),
+          ],
+          generatedAt: new Date(),
+        },
+      })
+
+      await runScan(saved?.resume || latestResume, jobDescription)
+      notify({ type: 'success', title: 'Auto Optimize Done', message: 'Resume content was optimized and rescanned.' })
+    } catch (optError) {
+      setError(optError.message || 'Auto optimize failed')
+    } finally {
+      setOptimizing(false)
+    }
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      {/* Header */}
       <div className="glass-card p-6 flex items-center gap-4">
         <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-500 to-rose-500 flex items-center justify-center">
           <BarChart3 className="w-6 h-6 text-white" />
@@ -137,31 +265,36 @@ export default function ATSScore() {
         <div>
           <h2 className="font-display font-bold text-xl text-slate-800">ATS Score Report</h2>
           <p className="text-sm text-slate-400">Detailed breakdown of how ATS systems parse your resume</p>
+          <p className="text-xs text-slate-400 mt-1">{loading ? 'Loading your latest resume and running a baseline scan...' : latestResume?._id ? 'Scanning your latest saved resume' : 'Scanning your profile data'}</p>
         </div>
         <div className="ml-auto flex items-center gap-2 text-primary-600 text-sm font-semibold">
           <TrendingUp className="w-4 h-4" />
-          <span>+12 from last scan</span>
+          <span>{(atsData?.overall || 0) > 0 ? `Score ${atsData.overall}%` : 'Ready to scan'}</span>
         </div>
       </div>
 
-      {/* Scan Controls */}
       <div className="glass-card p-6">
         <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Job Description</label>
         <textarea
           rows={5}
           value={jobDescription}
           onChange={(event) => setJobDescription(event.target.value)}
-          placeholder="Paste a target JD to run ATS scoring against backend routes"
+          placeholder="Paste a target JD to run ATS scoring against your resume"
           className="input-glass resize-none"
         />
         {error ? <p className="mt-2 text-sm text-rose-600">{error}</p> : null}
-        <button onClick={handleRunScan} disabled={loading} className="btn-primary mt-4 disabled:opacity-60">
+        <div className="flex flex-wrap gap-3 mt-4">
+          <button onClick={handleRunScan} disabled={loading || optimizing} className="btn-primary disabled:opacity-60">
           {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
           {loading ? 'Running Scan...' : 'Run ATS Scan'}
-        </button>
+          </button>
+          <button onClick={handleAutoOptimize} disabled={optimizing || loading} className="btn-secondary disabled:opacity-60">
+            {optimizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <WandSparkles className="w-4 h-4" />}
+            Auto-Optimize with AI
+          </button>
+        </div>
       </div>
 
-      {/* Score Circles */}
       <div className="glass-card p-8">
         <h3 className="font-display font-bold text-lg text-slate-800 mb-8 text-center">Score Overview</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 justify-items-center">
@@ -178,7 +311,6 @@ export default function ATSScore() {
         </div>
       </div>
 
-      {/* ATS System Scores */}
       <div className="glass-card p-6">
         <h3 className="font-display font-bold text-lg text-slate-800 mb-5">ATS Platform Compatibility</h3>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -204,7 +336,6 @@ export default function ATSScore() {
         </div>
       </div>
 
-      {/* Issues & Suggestions */}
       <div className="glass-card p-6">
         <h3 className="font-display font-bold text-lg text-slate-800 mb-5">Issues & Recommendations</h3>
         <div className="space-y-3">
@@ -235,7 +366,7 @@ export default function ATSScore() {
                   <p className="text-xs mt-0.5 opacity-80">{issue.desc}</p>
                 </div>
                 {issue.severity !== 'good' && (
-                  <button className="ml-auto shrink-0 text-xs font-semibold px-3 py-1.5 bg-white/60 rounded-lg hover:bg-white transition-colors">
+                  <button onClick={handleAutoOptimize} className="ml-auto shrink-0 text-xs font-semibold px-3 py-1.5 bg-white/60 rounded-lg hover:bg-white transition-colors">
                     Fix Now
                   </button>
                 )}
@@ -245,13 +376,42 @@ export default function ATSScore() {
         </div>
       </div>
 
-      {/* Improve CTA */}
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Sparkles className="w-5 h-5 text-accent-500" />
+          <h3 className="font-display font-bold text-lg text-slate-800">AI Suggestions</h3>
+        </div>
+        <div className="space-y-3">
+          {actionItems.map((item, i) => (
+            <div key={i} className="flex items-start gap-3 p-4 rounded-xl border border-accent-100 bg-accent-50/60">
+              <WandSparkles className="w-4 h-4 text-accent-500 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-slate-800">{item.label}</p>
+                <p className="text-xs text-slate-500 mt-1">{item.details}</p>
+                {Array.isArray(item.skills) && item.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {item.skills.map(skill => (
+                      <button key={skill} onClick={() => handleApplySkill(skill)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white text-primary-700 border border-primary-100 hover:bg-primary-50 transition-colors">
+                        <Plus className="w-3 h-3" /> {skill}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button onClick={handleAutoOptimize} disabled={optimizing} className="shrink-0 text-xs font-semibold px-3 py-1.5 bg-white rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60">
+                Apply
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="glass-card p-6 text-center border-primary-100 bg-gradient-to-br from-primary-50/50 to-accent-50/50">
         <Sparkles className="w-8 h-8 text-primary-500 mx-auto mb-3" />
         <h3 className="font-display font-bold text-lg text-slate-800 mb-2">Boost your score to 95+</h3>
         <p className="text-slate-400 text-sm mb-4">AI can automatically fix all issues and optimize your resume for top ATS systems.</p>
-        <button className="btn-primary mx-auto">
-          <ArrowUp className="w-4 h-4" />
+        <button onClick={handleAutoOptimize} disabled={optimizing} className="btn-primary mx-auto disabled:opacity-60">
+          {optimizing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUp className="w-4 h-4" />}
           Auto-Optimize with AI
         </button>
       </div>

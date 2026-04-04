@@ -23,6 +23,11 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  useEffect(() => {
+    const mode = user?.preferences?.mode || 'light'
+    document.documentElement.classList.toggle('theme-dark', mode === 'dark')
+  }, [user?.preferences?.mode])
+
   const register = async (name, email, password) => {
     const data = await api.register(name, email, password)
     api.setToken(data.token)

@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import {
-  Bell, CreditCard, Save, Camera, CheckCircle
-} from 'lucide-react'
+import { Bell, CreditCard, Save, Camera, CheckCircle, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useNotifications } from '../../context/NotificationContext'
 
 function SettingsSection({ title, children }) {
   return (
@@ -37,17 +36,10 @@ const emptyForm = {
   workMode: 'hybrid',
 }
 
-function getDisplayName(user) {
-  if (!user?.name) return 'Your Profile'
-  return user.name
-}
-
-function getFirstName(name) {
-  return (name || '').split(' ').filter(Boolean)[0] || 'You'
-}
-
 export default function DashboardSettings() {
   const { user, updateProfile } = useAuth()
+  const { notify } = useNotifications()
+
   const [notifications, setNotifications] = useState({
     jobMatches: true,
     atsAlerts: true,
@@ -55,10 +47,14 @@ export default function DashboardSettings() {
     interviewReminders: true,
     marketing: false,
   })
+
   const [activeTab, setActiveTab] = useState('Profile')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState(emptyForm)
+  const [appearanceMode, setAppearanceMode] = useState('light')
+  const [language, setLanguage] = useState('en-IN')
+  const [avatarPreview, setAvatarPreview] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -73,6 +69,9 @@ export default function DashboardSettings() {
       experienceLevel: user.experienceLevel || 'mid',
       workMode: user.workMode || 'hybrid',
     })
+    setAvatarPreview(user.avatar || '')
+    setAppearanceMode(user.preferences?.mode || 'light')
+    setLanguage(user.preferences?.language || 'en-IN')
     setNotifications({
       jobMatches: user.preferences?.notifications?.jobMatches ?? true,
       atsAlerts: user.preferences?.notifications?.atsAlerts ?? true,
@@ -83,6 +82,30 @@ export default function DashboardSettings() {
   }, [user])
 
   const tabs = ['Profile', 'Security', 'Notifications', 'Appearance', 'Billing']
+
+  const initials = useMemo(() => {
+    const name = form.name || user?.name || 'User'
+    return name
+      .split(' ')
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase()
+  }, [form.name, user?.name])
+
+  const onAvatarChange = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      setAvatarPreview(result)
+      notify({ type: 'success', title: 'Photo Selected', message: 'Profile photo preview updated.' })
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleSave = async () => {
     try {
@@ -95,18 +118,23 @@ export default function DashboardSettings() {
         targetRole: form.targetRole.trim(),
         targetCompanies: form.targetCompanies
           .split(',')
-          .map(item => item.trim())
+          .map((entry) => entry.trim())
           .filter(Boolean),
         experienceLevel: form.experienceLevel,
         workMode: form.workMode,
+        avatar: avatarPreview || '',
         preferences: {
           notifications,
+          mode: appearanceMode,
           theme: user?.preferences?.theme || 'emerald',
-          language: user?.preferences?.language || 'en-IN',
+          language,
         },
       })
       setSaved(true)
+      notify({ type: 'success', title: 'Settings Saved', message: 'Your preferences were saved successfully.' })
       setTimeout(() => setSaved(false), 2500)
+    } catch (err) {
+      notify({ type: 'error', title: 'Save Failed', message: err.message || 'Could not save settings.' })
     } finally {
       setSaving(false)
     }
@@ -116,16 +144,18 @@ export default function DashboardSettings() {
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="glass-card p-6">
         <h2 className="font-display font-bold text-xl text-slate-800 mb-1">Settings</h2>
-        <p className="text-sm text-slate-400">Manage your account, preferences, and notifications</p>
+        <p className="text-sm text-slate-400">Manage profile, notifications, appearance, and billing preferences</p>
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              activeTab === tab ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30' : 'bg-white text-slate-500 border border-slate-200 hover:border-primary-300'
+              activeTab === tab
+                ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/30'
+                : 'bg-white text-slate-500 border border-slate-200 hover:border-primary-300'
             }`}
           >
             {tab}
@@ -138,17 +168,22 @@ export default function DashboardSettings() {
           <SettingsSection title="Profile Information">
             <div className="flex items-center gap-4">
               <div className="relative">
-                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                  {getFirstName(user?.name)[0]?.toUpperCase() || 'U'}
-                </div>
-                <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full border border-slate-200 flex items-center justify-center shadow hover:bg-slate-50 transition-colors">
+                {avatarPreview ? (
+                  <img src={avatarPreview} alt="Profile" className="w-20 h-20 rounded-2xl object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                    {initials}
+                  </div>
+                )}
+                <label className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full border border-slate-200 flex items-center justify-center shadow hover:bg-slate-50 transition-colors cursor-pointer">
                   <Camera className="w-3.5 h-3.5 text-slate-500" />
-                </button>
+                  <input type="file" accept="image/*" onChange={onAvatarChange} className="hidden" />
+                </label>
               </div>
               <div>
-                <p className="font-semibold text-slate-800">{getDisplayName(user)}</p>
-                <p className="text-sm text-slate-400">{user?.email}</p>
-                <button className="text-xs text-primary-600 font-semibold mt-1 hover:text-primary-700">Change Photo</button>
+                <p className="font-semibold text-slate-800">{form.name || 'Your Profile'}</p>
+                <p className="text-sm text-slate-400">{form.email || user?.email}</p>
+                <p className="text-xs text-primary-600 font-semibold mt-1">Upload JPG/PNG for profile photo</p>
               </div>
             </div>
 
@@ -167,7 +202,7 @@ export default function DashboardSettings() {
                     type={type}
                     value={form[key]}
                     disabled={disabled}
-                    onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+                    onChange={(e) => setForm((prev) => ({ ...prev, [key]: e.target.value }))}
                     className="input-glass disabled:opacity-60 disabled:bg-slate-50"
                   />
                 </div>
@@ -179,7 +214,7 @@ export default function DashboardSettings() {
               <input
                 type="text"
                 value={form.targetCompanies}
-                onChange={e => setForm(prev => ({ ...prev, targetCompanies: e.target.value }))}
+                onChange={(e) => setForm((prev) => ({ ...prev, targetCompanies: e.target.value }))}
                 placeholder="Google, Amazon, Microsoft"
                 className="input-glass"
               />
@@ -190,11 +225,7 @@ export default function DashboardSettings() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Experience Level</label>
-                <select
-                  value={form.experienceLevel}
-                  onChange={e => setForm(prev => ({ ...prev, experienceLevel: e.target.value }))}
-                  className="input-glass"
-                >
+                <select value={form.experienceLevel} onChange={(e) => setForm((prev) => ({ ...prev, experienceLevel: e.target.value }))} className="input-glass">
                   <option value="junior">Junior (0-2 years)</option>
                   <option value="mid">Mid-Level (2-5 years)</option>
                   <option value="senior">Senior (5+ years)</option>
@@ -202,11 +233,7 @@ export default function DashboardSettings() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Work Mode</label>
-                <select
-                  value={form.workMode}
-                  onChange={e => setForm(prev => ({ ...prev, workMode: e.target.value }))}
-                  className="input-glass"
-                >
+                <select value={form.workMode} onChange={(e) => setForm((prev) => ({ ...prev, workMode: e.target.value }))} className="input-glass">
                   <option value="hybrid">Hybrid</option>
                   <option value="remote">Remote</option>
                   <option value="onsite">On-site</option>
@@ -232,10 +259,7 @@ export default function DashboardSettings() {
                   <p className="text-sm font-semibold text-slate-800">{label}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
                 </div>
-                <ToggleSwitch
-                  checked={notifications[key]}
-                  onChange={val => setNotifications(prev => ({ ...prev, [key]: val }))}
-                />
+                <ToggleSwitch checked={notifications[key]} onChange={(value) => setNotifications((prev) => ({ ...prev, [key]: value }))} />
               </div>
             ))}
           </div>
@@ -266,22 +290,40 @@ export default function DashboardSettings() {
           <div className="glass-card p-6 border-primary-100 bg-gradient-to-br from-primary-50/50 to-accent-50/30">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="font-display font-bold text-lg text-slate-800">Free Plan</p>
-                <p className="text-sm text-slate-400">5 AI resume generations/month</p>
+                <p className="font-display font-bold text-lg text-slate-800">{user?.plan === 'pro' ? 'Pro Plan' : 'Free Plan'}</p>
+                <p className="text-sm text-slate-400">{user?.plan === 'pro' ? 'Unlimited AI features enabled' : '5 AI resume generations/month'}</p>
               </div>
               <span className="badge-green">Active</span>
             </div>
+            <div className="grid sm:grid-cols-2 gap-3 mb-4">
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Current Plan</p>
+                <p className="text-sm font-bold text-slate-800 mt-1">{user?.plan || 'free'}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wide">Billing Status</p>
+                <p className="text-sm font-bold text-slate-800 mt-1">No payment due</p>
+              </div>
+            </div>
             <button className="btn-primary w-full justify-center">
               <CreditCard className="w-4 h-4" />
-              Upgrade to Pro — ₹499/month
+              Upgrade to Pro — Placeholder
             </button>
           </div>
+
           <SettingsSection title="Pro Plan Includes">
             <div className="space-y-3">
-              {['Unlimited AI resume generations', 'Priority ATS scanning', '20+ premium templates', 'Job tracker (unlimited)', 'AI email drafts', 'Resume analytics'].map(f => (
-                <div key={f} className="flex items-center gap-2">
+              {[
+                'Unlimited AI resume generations',
+                'Priority ATS scanning',
+                '20+ premium templates',
+                'Job tracker (unlimited)',
+                'AI email drafts',
+                'Advanced analytics',
+              ].map((feature) => (
+                <div key={feature} className="flex items-center gap-2">
                   <CheckCircle className="w-4 h-4 text-primary-500 shrink-0" />
-                  <span className="text-sm text-slate-700">{f}</span>
+                  <span className="text-sm text-slate-700">{feature}</span>
                 </div>
               ))}
             </div>
@@ -291,26 +333,36 @@ export default function DashboardSettings() {
 
       {activeTab === 'Appearance' && (
         <SettingsSection title="Theme & Display">
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-3 uppercase tracking-wide">Color Theme</label>
-              <div className="flex gap-3">
-                {[
-                  { name: 'Emerald', from: 'from-primary-500', to: 'to-primary-600' },
-                  { name: 'Indigo', from: 'from-accent-500', to: 'to-accent-600' },
-                  { name: 'Rose', from: 'from-rose-500', to: 'to-rose-600' },
-                  { name: 'Amber', from: 'from-amber-500', to: 'to-amber-600' },
-                ].map(({ name, from, to }) => (
-                  <button key={name} className={`w-10 h-10 rounded-xl bg-gradient-to-br ${from} ${to} ring-2 ring-offset-2 ring-transparent hover:ring-slate-300 transition-all`} title={name} />
-                ))}
+              <label className="block text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Appearance Mode</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setAppearanceMode('light')}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-colors ${
+                    appearanceMode === 'light' ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <Sun className="w-4 h-4" /> Light
+                </button>
+                <button
+                  onClick={() => setAppearanceMode('dark')}
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-semibold transition-colors ${
+                    appearanceMode === 'dark' ? 'border-primary-300 bg-primary-50 text-primary-700' : 'border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <Moon className="w-4 h-4" /> Dark
+                </button>
               </div>
             </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Language</label>
-              <select className="input-glass">
-                <option>English (India)</option>
-                <option>Hindi</option>
-                <option>Tamil</option>
+              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="input-glass">
+                <option value="en-IN">English (India)</option>
+                <option value="en-US">English (US)</option>
+                <option value="hi-IN">Hindi</option>
+                <option value="ta-IN">Tamil</option>
               </select>
             </div>
           </div>

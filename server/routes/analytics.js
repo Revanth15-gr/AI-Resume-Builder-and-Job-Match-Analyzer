@@ -95,4 +95,74 @@ router.get('/skill-gaps', protect, async (req, res) => {
   }
 })
 
+// GET /api/analytics/insights — resume + job match insights for dashboard analytics page
+router.get('/insights', protect, async (req, res) => {
+  try {
+    const userId = req.user._id
+    const latestResume = await Resume.findOne({ user: userId }).sort('-updatedAt')
+    const jobs = await Job.find({ user: userId }).sort('-updatedAt').limit(30)
+
+    const resumeSkills = [
+      ...(latestResume?.skills?.technical || []),
+      ...(latestResume?.skills?.tools || []),
+      ...(latestResume?.skills?.soft || []),
+    ]
+
+    const uniqueResumeSkills = Array.from(new Set(resumeSkills.map((skill) => String(skill).trim()).filter(Boolean)))
+    const jobMissingSkillSet = new Set()
+    const jobMatchedSkillSet = new Set()
+
+    jobs.forEach((job) => {
+      ;(job.missingSkills || []).forEach((skill) => jobMissingSkillSet.add(String(skill).trim()))
+      ;(job.matchedSkills || []).forEach((skill) => jobMatchedSkillSet.add(String(skill).trim()))
+    })
+
+    const totalReferencedSkills = new Set([...jobMissingSkillSet, ...jobMatchedSkillSet])
+    const skillMatchPercentage = totalReferencedSkills.size
+      ? Math.round((jobMatchedSkillSet.size / totalReferencedSkills.size) * 100)
+      : 0
+
+    const filledSections = [
+      latestResume?.personal?.summary,
+      latestResume?.experience?.length,
+      latestResume?.education?.length,
+      uniqueResumeSkills.length,
+      latestResume?.projects?.length,
+      latestResume?.certifications?.length,
+    ].filter(Boolean).length
+
+    const resumeStrengthScore = latestResume?.atsScore?.overall
+      ? Math.round((latestResume.atsScore.overall * 0.7) + ((filledSections / 6) * 30))
+      : Math.round((filledSections / 6) * 100)
+
+    const matchTrend = jobs
+      .filter((job) => typeof job.matchScore === 'number' && job.matchScore > 0)
+      .slice(0, 12)
+      .reverse()
+      .map((job) => ({
+        label: new Date(job.updatedAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+        score: job.matchScore,
+        company: job.company,
+      }))
+
+    const missingSkills = Array.from(jobMissingSkillSet)
+      .filter(Boolean)
+      .slice(0, 12)
+
+    res.json({
+      success: true,
+      insights: {
+        skillMatchPercentage,
+        resumeStrengthScore: Math.min(100, Math.max(0, resumeStrengthScore)),
+        missingSkills,
+        jobMatchTrend: matchTrend,
+        resumeSkillCount: uniqueResumeSkills.length,
+        atsScore: latestResume?.atsScore?.overall || 0,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message })
+  }
+})
+
 export default router

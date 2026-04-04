@@ -58,13 +58,13 @@ router.delete('/:id', protect, async (req, res) => {
 // POST /api/jobs/analyze — analyze job match against resume
 router.post('/analyze', protect, async (req, res) => {
   try {
-    const { jobDescription, resumeId } = req.body
+    const { jobDescription, resumeId, resumeData } = req.body
 
     if (!jobDescription) {
       return res.status(400).json({ success: false, message: 'Job description is required' })
     }
 
-    const result = await analyzeJobMatch(jobDescription, req.user._id, resumeId)
+    const result = await analyzeJobMatch(jobDescription, req.user._id, resumeId, resumeData)
     res.json({ success: true, ...result })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })

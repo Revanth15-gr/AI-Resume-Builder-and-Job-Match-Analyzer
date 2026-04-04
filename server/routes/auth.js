@@ -73,7 +73,7 @@ router.get('/me', protect, async (req, res) => {
 // PUT /api/auth/profile
 router.put('/profile', protect, async (req, res) => {
   try {
-    const allowed = ['name', 'phone', 'location', 'currentRole', 'targetRole', 'targetCompanies', 'experienceLevel', 'workMode', 'preferences']
+    const allowed = ['name', 'phone', 'location', 'currentRole', 'targetRole', 'targetCompanies', 'experienceLevel', 'workMode', 'avatar', 'preferences']
     const updates = {}
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key]

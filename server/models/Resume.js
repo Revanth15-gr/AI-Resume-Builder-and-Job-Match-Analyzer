@@ -43,6 +43,22 @@ const resumeSchema = new mongoose.Schema({
     soft: [String],
   },
 
+  // Projects
+  projects: [{
+    title: String,
+    description: String,
+    technologies: [String],
+    link: String,
+  }],
+
+  // Certifications
+  certifications: [{
+    title: String,
+    issuer: String,
+    year: String,
+    credentialId: String,
+  }],
+
   // AI Generation
   aiGenerated: {
     summary: { type: String, default: '' },

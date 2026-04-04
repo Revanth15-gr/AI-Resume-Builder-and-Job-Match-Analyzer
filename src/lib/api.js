@@ -76,13 +76,14 @@ class ApiClient {
   addJob(data) { return this.request('POST', '/jobs', data) }
   updateJob(id, data) { return this.request('PUT', `/jobs/${id}`, data) }
   deleteJob(id) { return this.request('DELETE', `/jobs/${id}`) }
-  analyzeJob(jobDescription, resumeId) { return this.request('POST', '/jobs/analyze', { jobDescription, resumeId }) }
+  analyzeJob(jobDescription, resumeId, resumeData) { return this.request('POST', '/jobs/analyze', { jobDescription, resumeId, resumeData }) }
   getJobStats() { return this.request('GET', '/jobs/stats') }
 
   // ─── Analytics ───
   getDashboard() { return this.request('GET', '/analytics/dashboard') }
   getScoreHistory() { return this.request('GET', '/analytics/score-history') }
   getSkillGaps() { return this.request('GET', '/analytics/skill-gaps') }
+  getAnalyticsInsights() { return this.request('GET', '/analytics/insights') }
 
   // ─── Health ───
   health() { return this.request('GET', '/health') }

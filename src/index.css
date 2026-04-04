@@ -5,6 +5,24 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --app-bg: #f8fafc;
+    --app-fg: #0f172a;
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-border: rgba(255, 255, 255, 0.6);
+    --input-bg: rgba(255, 255, 255, 0.8);
+    --input-border: #e2e8f0;
+  }
+
+  .theme-dark {
+    --app-bg: #0b1220;
+    --app-fg: #e2e8f0;
+    --glass-bg: rgba(15, 23, 42, 0.68);
+    --glass-border: rgba(148, 163, 184, 0.22);
+    --input-bg: rgba(15, 23, 42, 0.72);
+    --input-border: #334155;
+  }
+
   * {
     box-sizing: border-box;
     margin: 0;
@@ -19,8 +37,8 @@
 
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: var(--app-bg);
+    color: var(--app-fg);
     overflow-x: hidden;
   }
 
@@ -32,7 +50,9 @@
 @layer components {
   /* Glass Card */
   .glass-card {
-    @apply bg-white/70 backdrop-blur-xl border border-white/60 rounded-2xl shadow-glass;
+    background: var(--glass-bg);
+    border-color: var(--glass-border);
+    @apply backdrop-blur-xl border rounded-2xl shadow-glass;
   }
 
   .glass-card-hover {
@@ -83,9 +103,27 @@
 
   /* Input styles */
   .input-glass {
-    @apply w-full px-4 py-3 rounded-xl border border-slate-200 bg-white/80 backdrop-blur-sm
+    background: var(--input-bg);
+    border-color: var(--input-border);
+    @apply w-full px-4 py-3 rounded-xl border backdrop-blur-sm
            focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent
            placeholder:text-slate-400 text-slate-800 transition-all duration-200;
+  }
+
+  .theme-dark .input-glass {
+    @apply text-slate-100 placeholder:text-slate-500;
+  }
+
+  .theme-dark .btn-secondary {
+    @apply bg-slate-900/70 text-slate-100 border-slate-700 hover:border-primary-400;
+  }
+
+  .theme-dark .sidebar-link {
+    @apply text-slate-300 hover:bg-slate-800/70 hover:text-primary-300;
+  }
+
+  .theme-dark .sidebar-link.active {
+    @apply bg-slate-800/80 text-primary-300;
   }
 
   /* Badge */

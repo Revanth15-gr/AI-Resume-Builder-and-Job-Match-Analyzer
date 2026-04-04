@@ -54,6 +54,59 @@ const TECH_KEYWORDS = {
   'mobile': ['React Native', 'Flutter', 'Swift', 'Kotlin', 'iOS', 'Android', 'Expo'],
 }
 
+function normalizeResumePayload(resume = {}) {
+  const personal = resume.personal || {
+    name: resume.name || '',
+    email: resume.email || '',
+    phone: resume.phone || '',
+    location: resume.location || '',
+    linkedin: resume.linkedin || '',
+    portfolio: resume.portfolio || '',
+    summary: resume.summary || '',
+  }
+
+  return {
+    personal,
+    education: Array.isArray(resume.education) ? resume.education : [],
+    experience: Array.isArray(resume.experience) ? resume.experience : [],
+    skills: resume.skills || { technical: [], tools: [], soft: [] },
+  }
+}
+
+function getAllSkills(skills = {}) {
+  return [...(skills.technical || []), ...(skills.tools || []), ...(skills.soft || [])].filter(Boolean)
+}
+
+function buildActionItems(missingSkills = [], matchedSkills = []) {
+  const items = []
+
+  if (missingSkills.length) {
+    items.push({
+      type: 'skills',
+      label: `Add ${missingSkills.slice(0, 3).join(', ')} to your resume`,
+      details: 'These are the biggest gaps from the job description.',
+      skills: missingSkills.slice(0, 5),
+    })
+  }
+
+  if (matchedSkills.length) {
+    items.push({
+      type: 'summary',
+      label: `Highlight ${matchedSkills.slice(0, 2).join(' and ')} more prominently`,
+      details: 'Place the strongest overlap near the top of the resume.',
+      skills: matchedSkills.slice(0, 2),
+    })
+  }
+
+  items.push({
+    type: 'bullet',
+    label: 'Rewrite 1-2 experience bullets with measurable impact',
+    details: 'Use metrics, results, and action verbs to improve ATS relevance.',
+  })
+
+  return items
+}
+
 // ──────────────── Resume Generation (AI) ────────────────
 export async function generateResumeSummary(resume) {
   const { personal, experience, skills, education } = resume
@@ -103,14 +156,16 @@ Use Indian tech context. Include quantifiable metrics like percentages, team siz
 
 // ──────────────── ATS Score Analysis (AI) ────────────────
 export async function analyzeATS(resume, jobDescription = '') {
-  const { personal, experience, skills, education } = resume
-  const allSkills = [...(skills?.technical || []), ...(skills?.tools || []), ...(skills?.soft || [])]
+  const normalized = normalizeResumePayload(resume)
+  const { personal, experience, skills, education } = normalized
+  const allSkills = getAllSkills(skills)
 
   const prompt = `You are an ATS (Applicant Tracking System) expert. Analyze this resume against ${jobDescription ? 'the given job description' : 'general ATS standards'}.
 
+Resume Name: ${personal?.name || 'Not provided'}
+Resume Summary: ${personal?.summary || 'Not provided'}
 Resume Skills: ${allSkills.join(', ')}
 Experience: ${experience?.map(e => `${e.title} at ${e.company}`).join('; ') || 'None'}
-Has Summary: ${personal?.summary ? 'Yes' : 'No'}
 Has LinkedIn: ${personal?.linkedin ? 'Yes' : 'No'}
 Education: ${education?.length || 0} entries
 ${jobDescription ? `Job Description: ${jobDescription.substring(0, 500)}` : ''}
@@ -122,6 +177,7 @@ Return a JSON object with:
   "formatScore": <score 0-100>,
   "readability": <score 0-100>,
   "issues": [{"severity": "critical|warning|info", "message": "issue description", "suggestion": "fix suggestion"}],
+  "actionItems": [{"type": "skills|summary|bullet", "label": "action label", "details": "why it matters", "skills": ["optional"]}],
   "platformScores": {"naukri": <score>, "linkedin": <score>, "indeed": <score>, "workday": <score>, "greenhouse": <score>}
 }
 
@@ -140,6 +196,7 @@ Be realistic with scores. Return ONLY valid JSON.`
           formatScore: parsed.formatScore || 80,
           readability: parsed.readability || 75,
           issues: parsed.issues || [],
+          actionItems: parsed.actionItems || buildActionItems([], []),
           platformScores: parsed.platformScores || {},
         }
       }
@@ -148,25 +205,32 @@ Be realistic with scores. Return ONLY valid JSON.`
     }
   }
 
-  return localAnalyzeATS(resume, jobDescription)
+  return localAnalyzeATS(normalized, jobDescription)
 }
 
 // ──────────────── Job Match Analysis (AI) ────────────────
-export async function analyzeJobMatch(jobDescription, userId, resumeId) {
+export async function analyzeJobMatch(jobDescription, userId, resumeId, resumeData = null) {
   let resume
-  if (resumeId) {
+  if (resumeData) {
+    resume = normalizeResumePayload(resumeData)
+  } else if (resumeId) {
     resume = await Resume.findOne({ _id: resumeId, user: userId })
   } else {
     resume = await Resume.findOne({ user: userId }).sort('-updatedAt')
   }
 
-  const resumeSkills = resume
-    ? [...(resume.skills?.technical || []), ...(resume.skills?.tools || []), ...(resume.skills?.soft || [])]
-    : ['React', 'Node.js', 'JavaScript', 'MongoDB', 'Python']
+  const normalized = resume ? normalizeResumePayload(resume) : normalizeResumePayload()
+  const resumeSkills = getAllSkills(normalized.skills)
+  const resumeSummary = normalized.personal?.summary || ''
+  const experienceSummary = normalized.experience?.map(e => `${e.title} at ${e.company} (${e.duration || 'duration not provided'})`).join('; ') || 'None'
+  const educationSummary = normalized.education?.map(e => `${e.degree} from ${e.institution}`).join('; ') || 'None'
 
-  const prompt = `You are a job match analyst. Compare these resume skills against the job description.
+  const prompt = `You are a job match analyst. Compare this resume against the job description and identify only the real overlap.
 
 Resume Skills: ${resumeSkills.join(', ')}
+Resume Summary: ${resumeSummary || 'Not provided'}
+Experience: ${experienceSummary}
+Education: ${educationSummary}
 Job Description: ${jobDescription.substring(0, 800)}
 
 Return a JSON object with:
@@ -175,6 +239,7 @@ Return a JSON object with:
   "matchedSkills": ["skills found in both resume and JD"],
   "missingSkills": ["skills required by JD but missing from resume"],
   "aiSuggestions": ["4-5 specific, actionable suggestions to improve match"],
+  "actionItems": [{"type": "skills|summary|bullet", "label": "action label", "details": "why it matters", "skills": ["optional"]}],
   "keywordAnalysis": [{"keyword": "skill", "found": true/false, "importance": "high/medium/low"}]
 }
 
@@ -192,6 +257,7 @@ Be accurate with skill matching. Return ONLY valid JSON.`
           matchedSkills: parsed.matchedSkills || [],
           missingSkills: parsed.missingSkills || [],
           aiSuggestions: parsed.aiSuggestions || [],
+          actionItems: parsed.actionItems || buildActionItems(parsed.missingSkills || [], parsed.matchedSkills || []),
           keywordAnalysis: parsed.keywordAnalysis || [],
         }
       }
@@ -231,7 +297,7 @@ Return ONLY valid JSON array.`
 
 // ──────────────── AI Resume Content Generation (for frontend) ────────────────
 export async function generateResumeContent(resumeData) {
-  const { personal, education, experience, skills, template } = resumeData
+  const { personal, education, experience, skills, projects, certifications, template, jobDescription } = resumeData
 
   const prompt = `You are a world-class resume writer. Generate a complete, polished resume content.
 
@@ -239,16 +305,25 @@ Personal: ${JSON.stringify(personal || {})}
 Education: ${JSON.stringify(education || [])}
 Experience: ${JSON.stringify(experience || [])}
 Skills: ${JSON.stringify(skills || {})}
+Projects: ${JSON.stringify(projects || [])}
+Certifications: ${JSON.stringify(certifications || [])}
 Template Style: ${template || 'modern-pro'}
+${jobDescription ? `Target Job Description: ${jobDescription}` : ''}
+
+Rules:
+- Do not invent companies, dates, projects, certifications, or achievements that are not present in input.
+- You may rephrase existing responsibilities into stronger ATS-friendly bullet points.
+- Preserve user-provided facts and technologies.
+- Expand with professional language so the resume content is sufficient for a full page when rendered.
 
 Generate a complete resume with these sections. Return as JSON:
 {
-  "summary": "Professional summary (3 lines max)",
-  "experience": [{"title":"","company":"","duration":"","location":"","bullets":["action-verb bullet with metrics"]}],
+  "summary": "Professional summary (4-6 lines)",
+  "experience": [{"title":"","company":"","duration":"","location":"","bullets":["4-6 bullet points enhanced from provided content"]}],
   "education": [{"degree":"","institution":"","year":"","gpa":""}],
   "skills": {"technical":[""],"tools":[""],"soft":[""]},
-  "certifications": [""],
-  "projects": [{"name":"","description":"","tech":""}]
+  "certifications": [{"title":"","issuer":"","year":"","credentialId":""}],
+  "projects": [{"title":"","description":"","technologies":[""],"link":""}]
 }
 
 Make it ATS-optimized, use strong action verbs, include measurable achievements. Return ONLY valid JSON.`
@@ -268,10 +343,12 @@ Make it ATS-optimized, use strong action verbs, include measurable achievements.
 
   // Return basic structure
   return {
-    summary: `Results-driven ${experience?.[0]?.title || 'professional'} with expertise in ${(skills?.technical || []).slice(0, 3).join(', ')}. Proven track record of delivering impactful solutions.`,
+    summary: `Results-driven ${experience?.[0]?.title || 'professional'} with expertise in ${(skills?.technical || []).slice(0, 3).join(', ')}. Proven track record of delivering impactful solutions${jobDescription ? ' aligned to the target role' : ''}.`,
     experience: experience || [],
     education: education || [],
     skills: skills || { technical: [], tools: [], soft: [] },
+    projects: projects || [],
+    certifications: certifications || [],
   }
 }
 
@@ -294,7 +371,7 @@ function localGenerateResume(resume) {
 }
 
 function localAnalyzeATS(resume, jobDescription) {
-  const allSkills = [...(resume.skills?.technical || []), ...(resume.skills?.tools || []), ...(resume.skills?.soft || [])]
+  const allSkills = getAllSkills(resume.skills || {})
   const allText = JSON.stringify(resume).toLowerCase()
   const jdKeywords = jobDescription ? extractJDKeywords(jobDescription) : ['JavaScript', 'React', 'Node.js', 'Python', 'SQL', 'Git', 'REST API', 'CI/CD', 'Docker', 'AWS']
   const found = jdKeywords.filter(kw => allText.includes(kw.toLowerCase()))
@@ -308,7 +385,7 @@ function localAnalyzeATS(resume, jobDescription) {
   if (!resume.personal?.summary) issues.push({ severity: 'critical', message: 'Missing professional summary', suggestion: 'Add a 2-3 sentence professional summary' })
   if (allSkills.length < 5) issues.push({ severity: 'warning', message: 'Too few skills listed', suggestion: 'Add at least 8-10 relevant technical skills' })
   const platformScores = { naukri: overall + 3, linkedin: overall + 1, indeed: overall - 2, workday: overall - 5, greenhouse: overall + 2 }
-  return { overall, keywordDensity: keywordScore, formatScore, readability: readabilityScore, issues, platformScores }
+  return { overall, keywordDensity: keywordScore, formatScore, readability: readabilityScore, issues, actionItems: buildActionItems(jdKeywords.filter(kw => !found.includes(kw)), found), platformScores }
 }
 
 function localAnalyzeJobMatch(jobDescription, resumeSkills) {
@@ -321,6 +398,7 @@ function localAnalyzeJobMatch(jobDescription, resumeSkills) {
     matchedSkills,
     missingSkills,
     aiSuggestions: [`Add ${missingSkills.slice(0, 3).join(', ')} to your skills`, 'Tailor your summary to match the role', 'Include relevant certifications'],
+    actionItems: buildActionItems(missingSkills, matchedSkills),
     keywordAnalysis: jdKeywords.map(kw => ({ keyword: kw, found: matchedSkills.some(s => s.toLowerCase() === kw.toLowerCase()), importance: 'medium' })),
   }
 }
