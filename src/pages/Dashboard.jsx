@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
+import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, FileText, Target, LayoutTemplate,
@@ -16,6 +16,7 @@ import JobTracker from './dashboard/JobTracker'
 import Analytics from './dashboard/Analytics'
 import Notifications from './dashboard/Notifications'
 import DashboardSettings from './dashboard/DashboardSettings'
+import { useNotifications } from '../context/NotificationContext'
 import { useAuth } from '../context/AuthContext'
 
 const navItems = [
@@ -55,10 +56,12 @@ function UserBadge({ user }) {
   )
 }
 
-function Sidebar({ isMobileOpen, setMobileOpen }) {
+function Sidebar({ isMobileOpen, setMobileOpen, onLogout }) {
   const { user } = useAuth()
+  const { feed } = useNotifications()
   const location = useLocation()
   const currentPath = location.pathname.replace('/dashboard/', '').replace('/dashboard', '')
+  const unreadCount = feed.filter((item) => item.unread).length
 
   return (
     <>
@@ -125,8 +128,8 @@ function Sidebar({ isMobileOpen, setMobileOpen }) {
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span className="text-sm">{label}</span>
-                {path === 'notifications' && (
-                  <span className="ml-auto w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">3</span>
+                {path === 'notifications' && unreadCount > 0 && (
+                  <span className="ml-auto w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">{Math.min(unreadCount, 99)}</span>
                 )}
                 {isActive && !['notifications'].includes(path) && (
                   <ChevronRight className="w-3.5 h-3.5 ml-auto text-primary-500" />
@@ -137,9 +140,11 @@ function Sidebar({ isMobileOpen, setMobileOpen }) {
         </nav>
 
         <div className="px-3 py-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
+          <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 transition-colors">
             <UserBadge user={user} />
-            <LogOut className="w-4 h-4 text-slate-300 hover:text-rose-400 transition-colors" />
+            <button onClick={onLogout} className="p-1 rounded-lg hover:bg-slate-100" aria-label="Logout">
+              <LogOut className="w-4 h-4 text-slate-300 hover:text-rose-400 transition-colors" />
+            </button>
           </div>
           <Link to="/" className="block mt-2 text-center text-xs text-slate-400 hover:text-primary-500 transition-colors">
             ← Back to Landing Page
@@ -152,9 +157,11 @@ function Sidebar({ isMobileOpen, setMobileOpen }) {
 
 function TopBar({ setMobileOpen }) {
   const { user } = useAuth()
+  const { feed } = useNotifications()
   const location = useLocation()
   const currentPath = location.pathname.replace('/dashboard/', '').replace('/dashboard', '')
   const currentNav = navItems.find(n => n.path === currentPath) || navItems[0]
+  const unreadCount = feed.filter((item) => item.unread).length
 
   return (
     <header className="h-16 bg-white/80 backdrop-blur-xl border-b border-slate-100 flex items-center gap-4 px-6 sticky top-0 z-20">
@@ -173,7 +180,11 @@ function TopBar({ setMobileOpen }) {
       <div className="flex items-center gap-3">
         <Link to="/dashboard/notifications" className="relative p-2 rounded-xl hover:bg-slate-100 text-slate-500 transition-colors">
           <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
+          {unreadCount > 0 && (
+            <span className="absolute top-1 right-1 min-w-4 h-4 px-1 bg-rose-500 text-white text-[10px] leading-4 rounded-full flex items-center justify-center">
+              {Math.min(unreadCount, 99)}
+            </span>
+          )}
         </Link>
         <Link to="/dashboard/settings" className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 transition-colors">
           <Settings className="w-5 h-5" />
@@ -187,8 +198,10 @@ function TopBar({ setMobileOpen }) {
 }
 
 function DesktopNav() {
+  const { feed } = useNotifications()
   const location = useLocation()
   const currentPath = location.pathname.replace('/dashboard/', '').replace('/dashboard', '')
+  const unreadCount = feed.filter((item) => item.unread).length
 
   return (
     <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
@@ -211,7 +224,7 @@ function DesktopNav() {
           <Link key={path} to={`/dashboard/${path}`} className={`sidebar-link ${isActive ? 'active' : ''}`}>
             <Icon className="w-4 h-4 shrink-0" />
             <span className="text-sm">{label}</span>
-            {path === 'notifications' && <span className="ml-auto w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">3</span>}
+            {path === 'notifications' && unreadCount > 0 && <span className="ml-auto w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center">{Math.min(unreadCount, 99)}</span>}
             {isActive && !['notifications'].includes(path) && (
               <ChevronRight className="w-3.5 h-3.5 ml-auto text-primary-500" />
             )}
@@ -223,8 +236,14 @@ function DesktopNav() {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const handleLogout = () => {
+    logout()
+    navigate('/auth', { replace: true })
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
@@ -242,9 +261,11 @@ export default function Dashboard() {
           <DesktopNav />
 
           <div className="px-3 py-4 border-t border-slate-100">
-            <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors">
+            <div className="flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-50 transition-colors">
               <UserBadge user={user} />
-              <LogOut className="w-4 h-4 text-slate-300 hover:text-rose-400 transition-colors" />
+              <button onClick={handleLogout} className="p-1 rounded-lg hover:bg-slate-100" aria-label="Logout">
+                <LogOut className="w-4 h-4 text-slate-300 hover:text-rose-400 transition-colors" />
+              </button>
             </div>
             <Link to="/" className="block mt-2 text-center text-xs text-slate-400 hover:text-primary-500 transition-colors">
               ← Back to Landing Page
@@ -253,7 +274,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <Sidebar isMobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
+      <Sidebar isMobileOpen={mobileOpen} setMobileOpen={setMobileOpen} onLogout={handleLogout} />
 
       <div className="flex-1 lg:ml-64 flex flex-col min-h-screen">
         <TopBar setMobileOpen={setMobileOpen} />

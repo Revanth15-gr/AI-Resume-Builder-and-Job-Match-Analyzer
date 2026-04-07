@@ -29,6 +29,13 @@ const jobSchema = new mongoose.Schema({
     found: Boolean,
     importance: { type: String, enum: ['high', 'medium', 'low'] },
   }],
+  learningResources: [{
+    skill: String,
+    links: [{
+      platform: String,
+      url: String,
+    }],
+  }],
 }, { timestamps: true })
 
 jobSchema.index({ user: 1, stage: 1 })

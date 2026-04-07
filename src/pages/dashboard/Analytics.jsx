@@ -49,13 +49,23 @@ export default function Analytics() {
   const [dashboard, setDashboard] = useState(null)
   const [insights, setInsights] = useState(null)
   const [trend, setTrend] = useState(fallbackTrend)
+  const [skillGaps, setSkillGaps] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     let mounted = true
 
     async function loadAnalytics() {
       try {
-        const [dashboardRes, insightsRes] = await Promise.all([api.getDashboard(), api.getAnalyticsInsights()])
+        setLoading(true)
+        setError('')
+        const [dashboardRes, insightsRes, scoreHistoryRes, skillGapRes] = await Promise.all([
+          api.getDashboard(),
+          api.getAnalyticsInsights(),
+          api.getScoreHistory(),
+          api.getSkillGaps(),
+        ])
         if (!mounted) return
 
         if (dashboardRes?.success) {
@@ -68,8 +78,22 @@ export default function Analytics() {
             setTrend(insightsRes.insights.jobMatchTrend)
           }
         }
+
+        if ((!Array.isArray(insightsRes?.insights?.jobMatchTrend) || !insightsRes.insights.jobMatchTrend.length) && Array.isArray(scoreHistoryRes?.history) && scoreHistoryRes.history.length) {
+          setTrend(scoreHistoryRes.history.map((entry) => ({
+            label: entry.day,
+            score: entry.score,
+            company: 'ATS Trend',
+          })))
+        }
+
+        if (skillGapRes?.success && Array.isArray(skillGapRes.gaps)) {
+          setSkillGaps(skillGapRes.gaps)
+        }
       } catch (_error) {
-        // Keep fallback data when API is unavailable.
+        setError('Could not load live analytics. Showing best available data.')
+      } finally {
+        if (mounted) setLoading(false)
       }
     }
 
@@ -135,10 +159,23 @@ export default function Analytics() {
     ]
   }, [dashboard, insights])
 
-  const missingSkills = insights?.missingSkills || []
+  const missingSkills = useMemo(() => {
+    if (skillGaps.length) return skillGaps.map((gap) => gap.skill)
+    return insights?.missingSkills || []
+  }, [skillGaps, insights])
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      {error && (
+        <div className="glass-card p-4 border border-orange-200 bg-orange-50 text-sm text-orange-700">
+          {error}
+        </div>
+      )}
+
+      {loading && (
+        <div className="glass-card p-4 text-sm text-slate-500">Loading analytics...</div>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {topStats.map(({ label, value, unit, trend, icon: Icon, color, bg }, idx) => (
           <motion.div key={label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.08 }} className="glass-card p-5">
@@ -205,9 +242,15 @@ export default function Analytics() {
           <h3 className="font-display font-bold text-base text-slate-800 mb-5">Missing Skills</h3>
           {missingSkills.length ? (
             <div className="flex flex-wrap gap-2">
-              {missingSkills.map((skill) => (
-                <span key={skill} className="badge-orange">{skill}</span>
-              ))}
+              {missingSkills.map((skill) => {
+                const gap = skillGaps.find((entry) => entry.skill === skill)
+                return (
+                  <span key={skill} className="badge-orange">
+                    {skill}
+                    {gap?.frequency ? ` (${gap.frequency})` : ''}
+                  </span>
+                )
+              })}
             </div>
           ) : (
             <div className="rounded-xl border border-primary-100 bg-primary-50 p-4 text-sm text-primary-700">

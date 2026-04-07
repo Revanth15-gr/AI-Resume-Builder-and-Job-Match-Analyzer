@@ -26,7 +26,7 @@ const gradientByType = {
 }
 
 export default function Notifications() {
-  const { feed, notify, markAllRead, removeNotification, setNotificationFilter } = useNotifications()
+  const { feed, notify, markAllRead, removeNotification, markNotificationRead } = useNotifications()
   const [filter, setFilter] = useState('all')
 
   const unreadCount = feed.filter((item) => item.unread).length
@@ -52,7 +52,7 @@ export default function Notifications() {
   }
 
   const markAsRead = (id) => {
-    setNotificationFilter((item) => (item.id === id ? { ...item, unread: false } : item))
+    markNotificationRead(id)
   }
 
   return (

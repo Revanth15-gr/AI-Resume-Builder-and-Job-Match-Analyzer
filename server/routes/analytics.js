@@ -2,6 +2,7 @@ import { Router } from 'express'
 import Resume from '../models/Resume.js'
 import Job from '../models/Job.js'
 import { protect } from '../middleware/auth.js'
+import { analyzeJobMatch } from '../services/ai.js'
 
 const router = Router()
 
@@ -74,7 +75,36 @@ router.get('/score-history', protect, async (req, res) => {
 // GET /api/analytics/skill-gaps — skill gap analysis
 router.get('/skill-gaps', protect, async (req, res) => {
   try {
-    const jobs = await Job.find({ user: req.user._id, missingSkills: { $exists: true, $ne: [] } })
+    const userId = req.user._id
+    const latestResume = await Resume.findOne({ user: userId }).sort('-updatedAt')
+
+    // Backfill older jobs that do not have analyzed missing skills yet.
+    const jobsNeedingAnalysis = await Job.find({
+      user: userId,
+      description: { $exists: true, $ne: '' },
+      $or: [
+        { missingSkills: { $exists: false } },
+        { missingSkills: { $size: 0 } },
+      ],
+    }).limit(20)
+
+    if (latestResume && jobsNeedingAnalysis.length) {
+      for (const job of jobsNeedingAnalysis) {
+        try {
+          const analyzed = await analyzeJobMatch(job.description, userId, latestResume._id)
+          job.matchScore = analyzed.matchScore || 0
+          job.matchedSkills = analyzed.matchedSkills || []
+          job.missingSkills = analyzed.missingSkills || []
+          job.aiSuggestions = analyzed.aiSuggestions || []
+          job.keywordAnalysis = analyzed.keywordAnalysis || []
+          await job.save()
+        } catch (_error) {
+          // Skip a single failed analysis and continue processing others.
+        }
+      }
+    }
+
+    const jobs = await Job.find({ user: userId, missingSkills: { $exists: true, $ne: [] } })
     
     // Aggregate missing skills across all tracked jobs
     const skillCount = {}
@@ -89,7 +119,7 @@ router.get('/skill-gaps', protect, async (req, res) => {
       .sort((a, b) => b.frequency - a.frequency)
       .slice(0, 10)
 
-    res.json({ success: true, gaps })
+    res.json({ success: true, gaps, sources: jobs.length })
   } catch (err) {
     res.status(500).json({ success: false, message: err.message })
   }

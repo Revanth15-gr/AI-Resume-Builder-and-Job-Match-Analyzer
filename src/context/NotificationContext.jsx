@@ -108,6 +108,14 @@ export function NotificationProvider({ children }) {
     })
   }
 
+  const markNotificationRead = (id) => {
+    setFeed((prev) => {
+      const next = prev.map((item) => (item.id === id ? { ...item, unread: false } : item))
+      localStorage.setItem('resumeai_notifications', JSON.stringify(next))
+      return next
+    })
+  }
+
   const setNotificationFilter = (predicate) => {
     if (typeof predicate !== 'function') return
     setFeed((prev) => {
@@ -118,7 +126,7 @@ export function NotificationProvider({ children }) {
   }
 
   const value = useMemo(
-    () => ({ notify, dismiss, feed, markAllRead, removeNotification, setNotificationFilter, pushNotification }),
+    () => ({ notify, dismiss, feed, markAllRead, removeNotification, markNotificationRead, setNotificationFilter, pushNotification }),
     [feed]
   )
 

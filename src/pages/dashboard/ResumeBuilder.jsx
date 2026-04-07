@@ -11,6 +11,7 @@ import {
   Code2,
   FolderKanban,
   Medal,
+  Trophy,
   ChevronRight,
   ChevronLeft,
   Download,
@@ -18,6 +19,9 @@ import {
   Loader2,
   Printer,
   LayoutTemplate,
+  History,
+  RotateCcw,
+  Save,
 } from 'lucide-react'
 
 const steps = [
@@ -25,10 +29,11 @@ const steps = [
   { id: 2, label: 'Education', icon: GraduationCap },
   { id: 3, label: 'Experience', icon: Briefcase },
   { id: 4, label: 'Projects', icon: FolderKanban },
-  { id: 5, label: 'Certifications', icon: Medal },
-  { id: 6, label: 'Skills', icon: Code2 },
-  { id: 7, label: 'Template', icon: LayoutTemplate },
-  { id: 8, label: 'Generate', icon: Sparkles },
+  { id: 5, label: 'Achievements', icon: Trophy },
+  { id: 6, label: 'Certifications', icon: Medal },
+  { id: 7, label: 'Skills', icon: Code2 },
+  { id: 8, label: 'Template', icon: LayoutTemplate },
+  { id: 9, label: 'Generate', icon: Sparkles },
 ]
 
 const TEMPLATES = [
@@ -51,6 +56,7 @@ const emptyResumeData = {
   education: [],
   experience: [],
   projects: [],
+  achievements: [],
   certifications: [],
   skills: { technical: [], tools: [], soft: [] },
 }
@@ -275,6 +281,53 @@ function ProjectsStep({ data, setData }) {
   )
 }
 
+function AchievementsStep({ data, setData }) {
+  const list = data.achievements || []
+
+  const update = (idx, field, value) => {
+    const next = [...list]
+    next[idx] = { ...next[idx], [field]: value }
+    setData((prev) => ({ ...prev, achievements: next }))
+  }
+
+  const add = () =>
+    setData((prev) => ({
+      ...prev,
+      achievements: [...list, { title: '', description: '', impact: '' }],
+    }))
+
+  return (
+    <div>
+      <h2 className="font-display font-bold text-xl text-slate-800 mb-1">Achievements</h2>
+      <p className="text-sm text-slate-400 mb-6">Show measurable achievements (awards, outcomes, milestones).</p>
+      {list.length === 0 && (
+        <div className="glass-card p-5 mb-4 text-sm text-slate-400 border-dashed border border-slate-200">
+          No achievements yet. Click "Add Achievement" to start.
+        </div>
+      )}
+      {list.map((item, idx) => (
+        <div key={idx} className="glass-card p-5 space-y-4 mb-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Achievement Title</label>
+              <input placeholder="Top Performer Award" value={item.title || ''} onChange={(e) => update(idx, 'title', e.target.value)} className="input-glass" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Impact</label>
+              <input placeholder="Improved conversion by 28%" value={item.impact || ''} onChange={(e) => update(idx, 'impact', e.target.value)} className="input-glass" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Description</label>
+            <textarea rows={3} placeholder="Describe the achievement context and business result." value={item.description || ''} onChange={(e) => update(idx, 'description', e.target.value)} className="input-glass resize-none" />
+          </div>
+        </div>
+      ))}
+      <button onClick={add} className="text-sm text-primary-600 font-semibold flex items-center gap-1 hover:text-primary-700"><span className="text-lg">+</span> Add Achievement</button>
+    </div>
+  )
+}
+
 function CertificationsStep({ data, setData }) {
   const list = data.certifications || []
 
@@ -426,6 +479,7 @@ function GenerateStep({ data, generating, generated, generatedData, onGenerate, 
   const education = generatedResume.education || data.education || []
   const skills = generatedResume.skills || data.skills || { technical: [], tools: [], soft: [] }
   const projects = generatedResume.projects || data.projects || []
+  const achievements = generatedResume.achievements || data.achievements || []
   const certifications = generatedResume.certifications || data.certifications || []
 
   return (
@@ -518,6 +572,19 @@ function GenerateStep({ data, generating, generated, generatedData, onGenerate, 
                   </div>
                 )}
 
+                {achievements.length > 0 && (
+                  <div className="section">
+                    <h2 className="text-xs font-black uppercase tracking-widest mb-2 pb-1" style={{ color: template.accent, borderBottom: `2px solid ${template.accent}20` }}>Achievements</h2>
+                    {achievements.map((item, idx) => (
+                      <div key={idx} className="mb-2">
+                        <p className="text-sm font-semibold text-slate-800">{item.title || 'Achievement'}</p>
+                        {item.description ? <p className="text-xs text-slate-600 mt-0.5">{item.description}</p> : null}
+                        {item.impact ? <p className="text-xs text-slate-500 mt-0.5">Impact: {item.impact}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {education.length > 0 && (
                   <div className="section">
                     <h2 className="text-xs font-black uppercase tracking-widest mb-2 pb-1" style={{ color: template.accent, borderBottom: `2px solid ${template.accent}20` }}>Education</h2>
@@ -567,6 +634,72 @@ function GenerateStep({ data, generating, generated, generatedData, onGenerate, 
   )
 }
 
+function VersionHistoryPanel({
+  resumeId,
+  versions,
+  loading,
+  restoringVersionId,
+  savingDraft,
+  onRestore,
+  onSaveDraft,
+}) {
+  const formatDate = (value) => {
+    if (!value) return 'Unknown time'
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return 'Unknown time'
+    return date.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+  }
+
+  return (
+    <div className="glass-card p-6">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <History className="w-4 h-4 text-primary-500" />
+          <h3 className="font-display font-bold text-base text-slate-800">Version History</h3>
+        </div>
+        <button onClick={onSaveDraft} disabled={savingDraft} className="btn-secondary text-sm py-2 disabled:opacity-60">
+          {savingDraft ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save Draft
+        </button>
+      </div>
+
+      {!resumeId ? (
+        <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">
+          Save or generate your resume once to start tracking versions.
+        </div>
+      ) : loading ? (
+        <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">Loading versions...</div>
+      ) : versions.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">
+          No versions yet. Click "Save Draft" to create your first snapshot.
+        </div>
+      ) : (
+        <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+          {versions.map((version) => (
+            <div key={version._id} className="rounded-xl border border-slate-200 bg-white/80 p-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{version.label || 'Saved Version'}</p>
+                <p className="text-xs text-slate-400 mt-0.5">{formatDate(version.createdAt)}</p>
+              </div>
+              <button
+                onClick={() => onRestore(version._id)}
+                disabled={restoringVersionId === version._id}
+                className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-slate-200 hover:border-primary-300 hover:text-primary-700 transition-colors disabled:opacity-60"
+              >
+                {restoringVersionId === version._id ? (
+                  <span className="inline-flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Restoring</span>
+                ) : (
+                  <span className="inline-flex items-center gap-1"><RotateCcw className="w-3 h-3" /> Restore</span>
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ResumeBuilder() {
   const location = useLocation()
   const { notify } = useNotifications()
@@ -580,6 +713,50 @@ export default function ResumeBuilder() {
   const [generating, setGenerating] = useState(false)
   const [generated, setGenerated] = useState(false)
   const [generatedData, setGeneratedData] = useState(null)
+  const [versions, setVersions] = useState([])
+  const [versionLoading, setVersionLoading] = useState(false)
+  const [restoringVersionId, setRestoringVersionId] = useState('')
+  const [savingDraft, setSavingDraft] = useState(false)
+
+  const hydrateFromResume = (resume, templateFallback = initialTemplate) => {
+    if (!resume) return
+    setResumeId(resume._id)
+    setSelectedTemplate(resume.template || templateFallback)
+    setData({
+      name: resume.personal?.name || '',
+      email: resume.personal?.email || '',
+      phone: resume.personal?.phone || '',
+      location: resume.personal?.location || '',
+      linkedin: resume.personal?.linkedin || '',
+      portfolio: resume.personal?.portfolio || '',
+      summary: resume.personal?.summary || '',
+      education: resume.education || [],
+      experience: (resume.experience || []).map((item) => ({ ...item, responsibilities: normalizeResponsibilities(item) })),
+      projects: (resume.projects || []).map((project) => ({ ...project, technologies: toCsv(project.technologies) })),
+      achievements: resume.achievements || [],
+      certifications: resume.certifications || [],
+      skills: resume.skills || { technical: [], tools: [], soft: [] },
+    })
+    setGenerated(resume.status === 'generated')
+    setGeneratedData(null)
+  }
+
+  const loadVersions = async (targetResumeId) => {
+    if (!targetResumeId) {
+      setVersions([])
+      return
+    }
+
+    try {
+      setVersionLoading(true)
+      const response = await api.getResumeVersions(targetResumeId)
+      setVersions(Array.isArray(response?.versions) ? response.versions : [])
+    } catch (_error) {
+      setVersions([])
+    } finally {
+      setVersionLoading(false)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
@@ -590,22 +767,7 @@ export default function ResumeBuilder() {
         const resume = response?.resume
         if (!mounted || !resume) return
 
-        setResumeId(resume._id)
-        setSelectedTemplate(resume.template || initialTemplate)
-        setData({
-          name: resume.personal?.name || '',
-          email: resume.personal?.email || '',
-          phone: resume.personal?.phone || '',
-          location: resume.personal?.location || '',
-          linkedin: resume.personal?.linkedin || '',
-          portfolio: resume.personal?.portfolio || '',
-          summary: resume.personal?.summary || '',
-          education: resume.education || [],
-          experience: (resume.experience || []).map((item) => ({ ...item, responsibilities: normalizeResponsibilities(item) })),
-          projects: (resume.projects || []).map((project) => ({ ...project, technologies: toCsv(project.technologies) })),
-          certifications: resume.certifications || [],
-          skills: resume.skills || { technical: [], tools: [], soft: [] },
-        })
+        hydrateFromResume(resume, initialTemplate)
       } catch (_err) {
         // Keep empty form when no resume exists yet.
       }
@@ -616,6 +778,10 @@ export default function ResumeBuilder() {
       mounted = false
     }
   }, [initialTemplate])
+
+  useEffect(() => {
+    loadVersions(resumeId)
+  }, [resumeId])
 
   const buildResumePayload = (payload, generatedOutput = null) => {
     const active = generatedOutput || payload
@@ -644,6 +810,7 @@ export default function ResumeBuilder() {
         technologies: Array.isArray(project.technologies) ? project.technologies : fromCsv(project.technologies),
         link: project.link || '',
       })),
+      achievements: active.achievements || payload.achievements || [],
       certifications: active.certifications || payload.certifications || [],
       skills: active.skills || payload.skills,
       status: generatedOutput ? 'generated' : 'draft',
@@ -679,6 +846,7 @@ export default function ResumeBuilder() {
         experience: data.experience,
         projects: data.projects.map((project) => ({ ...project, technologies: fromCsv(project.technologies) })),
         certifications: data.certifications,
+        achievements: data.achievements,
         skills: data.skills,
         template: selectedTemplate,
       }
@@ -691,7 +859,11 @@ export default function ResumeBuilder() {
 
         const payload = buildResumePayload(data, generatedOutput)
         const saved = resumeId ? await api.updateResume(resumeId, payload) : await api.createResume(payload)
-        setResumeId(saved?.resume?._id || resumeId)
+        const savedResume = saved?.resume
+        if (savedResume) {
+          hydrateFromResume(savedResume, initialTemplate)
+          await loadVersions(savedResume._id)
+        }
 
         notify({
           type: 'success',
@@ -707,6 +879,42 @@ export default function ResumeBuilder() {
     setGenerated(true)
   }
 
+  const handleSaveDraft = async () => {
+    try {
+      setSavingDraft(true)
+      const payload = buildResumePayload(data)
+      const saved = resumeId ? await api.updateResume(resumeId, payload) : await api.createResume(payload)
+      const savedResume = saved?.resume
+      if (savedResume) {
+        hydrateFromResume(savedResume, initialTemplate)
+        await loadVersions(savedResume._id)
+      }
+      notify({ type: 'success', title: 'Draft Saved', message: 'A new resume version was created.' })
+    } catch (err) {
+      notify({ type: 'error', title: 'Save Failed', message: err.message || 'Could not save draft.' })
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  const handleRestoreVersion = async (versionId) => {
+    if (!resumeId || !versionId) return
+    try {
+      setRestoringVersionId(versionId)
+      const response = await api.restoreResumeVersion(resumeId, versionId)
+      const restored = response?.resume
+      if (restored) {
+        hydrateFromResume(restored, initialTemplate)
+        await loadVersions(restored._id)
+      }
+      notify({ type: 'success', title: 'Version Restored', message: 'Selected resume version has been restored.' })
+    } catch (err) {
+      notify({ type: 'error', title: 'Restore Failed', message: err.message || 'Could not restore this version.' })
+    } finally {
+      setRestoringVersionId('')
+    }
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="glass-card p-8">
@@ -717,24 +925,35 @@ export default function ResumeBuilder() {
             {step === 2 && <EducationStep data={data} setData={setData} />}
             {step === 3 && <ExperienceStep data={data} setData={setData} />}
             {step === 4 && <ProjectsStep data={data} setData={setData} />}
-            {step === 5 && <CertificationsStep data={data} setData={setData} />}
-            {step === 6 && <SkillsStep data={data} setData={setData} />}
-            {step === 7 && <TemplateStep selectedTemplate={selectedTemplate} setSelectedTemplate={setSelectedTemplate} />}
-            {step === 8 && <GenerateStep data={data} generating={generating} generated={generated} generatedData={generatedData} onGenerate={handleGenerate} selectedTemplate={selectedTemplate} />}
+            {step === 5 && <AchievementsStep data={data} setData={setData} />}
+            {step === 6 && <CertificationsStep data={data} setData={setData} />}
+            {step === 7 && <SkillsStep data={data} setData={setData} />}
+            {step === 8 && <TemplateStep selectedTemplate={selectedTemplate} setSelectedTemplate={setSelectedTemplate} />}
+            {step === 9 && <GenerateStep data={data} generating={generating} generated={generated} generatedData={generatedData} onGenerate={handleGenerate} selectedTemplate={selectedTemplate} />}
           </motion.div>
         </AnimatePresence>
 
-        {step < 8 && (
+        {step < 9 && (
           <div className="flex justify-between mt-8 pt-6 border-t border-slate-100">
             <button onClick={() => setStep((state) => Math.max(1, state - 1))} disabled={step === 1} className="btn-secondary disabled:opacity-40 disabled:cursor-not-allowed">
               <ChevronLeft className="w-4 h-4" /> Previous
             </button>
-            <button onClick={() => setStep((state) => Math.min(8, state + 1))} className="btn-primary">
-              {step === 7 ? 'Generate Resume' : 'Next Step'} <ChevronRight className="w-4 h-4" />
+            <button onClick={() => setStep((state) => Math.min(9, state + 1))} className="btn-primary">
+              {step === 8 ? 'Generate Resume' : 'Next Step'} <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         )}
       </div>
+
+      <VersionHistoryPanel
+        resumeId={resumeId}
+        versions={versions}
+        loading={versionLoading}
+        restoringVersionId={restoringVersionId}
+        savingDraft={savingDraft}
+        onRestore={handleRestoreVersion}
+        onSaveDraft={handleSaveDraft}
+      />
     </motion.div>
   )
 }

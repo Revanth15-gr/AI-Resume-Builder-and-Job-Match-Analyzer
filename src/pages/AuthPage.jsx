@@ -1,35 +1,125 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Sparkles, Mail, Lock, User, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../context/AuthContext'
 
 export default function AuthPage() {
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
   const [mode, setMode] = useState('login') // 'login' | 'register'
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('')
   const navigate = useNavigate()
-  const { login, register } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const verificationHandledRef = useRef(false)
+  const { login, register, loginWithGoogle, verifyEmail, resendVerification } = useAuth()
+
+  useEffect(() => {
+    const queryMode = searchParams.get('mode')
+    const queryEmail = searchParams.get('email')
+    const queryToken = searchParams.get('token')
+
+    if (queryMode === 'register') {
+      setMode('register')
+    }
+
+    if (
+      queryMode === 'verify' &&
+      queryEmail &&
+      queryToken &&
+      !verificationHandledRef.current
+    ) {
+      verificationHandledRef.current = true
+      setLoading(true)
+      setError('')
+      setMessage('')
+
+      verifyEmail(queryEmail, queryToken)
+        .then((data) => {
+          setMessage(data.message || 'Email verified successfully. You can sign in now.')
+          setMode('login')
+          setForm((prev) => ({ ...prev, email: queryEmail, password: '' }))
+          setSearchParams({})
+        })
+        .catch((err) => {
+          setError(err.message || 'Email verification failed')
+          setSearchParams({})
+        })
+        .finally(() => setLoading(false))
+    }
+  }, [searchParams, setSearchParams, verifyEmail])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    setMessage('')
     setLoading(true)
 
     try {
       if (mode === 'register') {
         if (!form.name) throw new Error('Name is required')
-        await register(form.name, form.email, form.password)
+        const data = await register(form.name, form.email, form.password)
+        setPendingVerificationEmail(form.email)
+        setMessage(data.message || 'Account created. Please verify your email before sign in.')
+        if (data.devVerificationLink) {
+          setMessage((msg) => `${msg} Dev link: ${data.devVerificationLink}`)
+        }
+        setMode('login')
+        setForm((prev) => ({ ...prev, password: '' }))
       } else {
         await login(form.email, form.password)
+        navigate('/dashboard')
       }
-      navigate('/dashboard')
     } catch (err) {
       setError(err.message)
+      if (err.code === 'EMAIL_NOT_VERIFIED') {
+        setPendingVerificationEmail(form.email)
+      }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    if (!credentialResponse?.credential) {
+      setError('Google sign-in failed. Please try again.')
+      return
+    }
+
+    setError('')
+    setMessage('')
+    setGoogleLoading(true)
+    try {
+      await loginWithGoogle(credentialResponse.credential)
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed')
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    if (!pendingVerificationEmail) return
+    setResendLoading(true)
+    setError('')
+    try {
+      const data = await resendVerification(pendingVerificationEmail)
+      setMessage(data.message || 'Verification email sent')
+      if (data.devVerificationLink) {
+        setMessage((msg) => `${msg} Dev link: ${data.devVerificationLink}`)
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to resend verification email')
+    } finally {
+      setResendLoading(false)
     }
   }
 
@@ -132,6 +222,27 @@ export default function AuthPage() {
               </motion.div>
             )}
 
+            {message && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-700 break-words"
+              >
+                {message}
+              </motion.div>
+            )}
+
+            {pendingVerificationEmail && mode === 'login' && (
+              <button
+                type="button"
+                onClick={handleResendVerification}
+                disabled={resendLoading}
+                className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {resendLoading ? 'Sending verification email...' : `Resend verification email to ${pendingVerificationEmail}`}
+              </button>
+            )}
+
             <button
               type="submit"
               disabled={loading}
@@ -146,6 +257,33 @@ export default function AuthPage() {
                 </>
               )}
             </button>
+
+            {googleClientId && (
+              <>
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200" />
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-white px-3 text-xs uppercase tracking-wide text-slate-400">Or</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-center">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => setError('Google sign-in failed. Please try again.')}
+                    text={mode === 'login' ? 'signin_with' : 'signup_with'}
+                    shape="pill"
+                    width="320"
+                  />
+                </div>
+
+                {googleLoading && (
+                  <p className="text-center text-sm text-slate-500">Signing in with Google...</p>
+                )}
+              </>
+            )}
           </form>
 
           <div className="mt-6 text-center">

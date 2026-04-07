@@ -51,6 +51,13 @@ const resumeSchema = new mongoose.Schema({
     link: String,
   }],
 
+  // Achievements
+  achievements: [{
+    title: String,
+    description: String,
+    impact: String,
+  }],
+
   // Certifications
   certifications: [{
     title: String,
@@ -91,6 +98,11 @@ const resumeSchema = new mongoose.Schema({
   // Metadata
   downloadCount: { type: Number, default: 0 },
   lastEdited: { type: Date, default: Date.now },
+  versionHistory: [{
+    label: { type: String, default: 'Saved Version' },
+    snapshot: mongoose.Schema.Types.Mixed,
+    createdAt: { type: Date, default: Date.now },
+  }],
 }, { timestamps: true })
 
 resumeSchema.index({ user: 1, updatedAt: -1 })

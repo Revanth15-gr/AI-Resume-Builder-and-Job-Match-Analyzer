@@ -195,6 +195,9 @@ function normalizeResumePayload(resume = {}) {
     education: Array.isArray(resume.education) ? resume.education : [],
     experience: Array.isArray(resume.experience) ? resume.experience : [],
     skills: resume.skills || { technical: [], tools: [], soft: [] },
+    projects: Array.isArray(resume.projects) ? resume.projects : [],
+    certifications: Array.isArray(resume.certifications) ? resume.certifications : [],
+    achievements: Array.isArray(resume.achievements) ? resume.achievements : [],
   }
 }
 
@@ -459,9 +462,76 @@ Return ONLY valid JSON array.`
   return allTech.filter(s => !currentSkills.some(cs => cs.toLowerCase() === s.toLowerCase())).slice(0, 8)
 }
 
+export async function generateCoverLetter({ resume, jobDescription = '', company = '', role = '' }) {
+  const normalized = normalizeResumePayload(resume || {})
+  const skills = getAllSkills(normalized.skills)
+
+  const prompt = `You are an expert career coach. Write a professional cover letter in under 350 words.
+
+Resume data (JSON): ${JSON.stringify(normalized)}
+Target company: ${company || 'Not specified'}
+Target role: ${role || 'Not specified'}
+Job description: ${jobDescription || 'Not provided'}
+
+Rules:
+- Use only facts available in the resume payload.
+- Do not invent achievements, employers, projects, or certifications.
+- Tone: confident, concise, professional.
+- Include 3 concrete value points tied to user experience/skills.
+
+Return JSON:
+{
+  "subject": "...",
+  "coverLetter": "..."
+}
+
+Return ONLY valid JSON.`
+
+  const aiResponse = await chatCompletion([{ role: 'user', content: prompt }], 1200)
+  if (aiResponse) {
+    try {
+      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        if (parsed.coverLetter) return parsed
+      }
+    } catch (_error) {
+      // Fallback below.
+    }
+  }
+
+  const subject = `Application for ${role || 'the role'}${company ? ` at ${company}` : ''}`
+  const coverLetter = `Dear Hiring Manager,\n\nI am excited to apply for ${role || 'this role'}${company ? ` at ${company}` : ''}. With hands-on experience in ${skills.slice(0, 4).join(', ') || 'software development'} and a strong focus on delivering measurable outcomes, I can contribute effectively to your team.\n\nIn my previous work, I have built and improved production-ready solutions, collaborated with cross-functional teams, and consistently focused on quality, performance, and reliability. I am particularly motivated by opportunities where I can solve meaningful problems and create business impact.\n\nI would welcome the opportunity to discuss how my background aligns with your needs. Thank you for your time and consideration.\n\nSincerely,\n${normalized.personal?.name || 'Candidate'}`
+  return { subject, coverLetter }
+}
+
+export async function tailorResumeForJob({ resume, jobDescription = '' }) {
+  const normalized = normalizeResumePayload(resume || {})
+  const base = await generateResumeContent({
+    personal: normalized.personal,
+    education: normalized.education,
+    experience: normalized.experience,
+    skills: normalized.skills,
+    projects: resume?.projects || [],
+    certifications: resume?.certifications || [],
+    achievements: resume?.achievements || [],
+    template: resume?.template || 'modern-pro',
+    jobDescription,
+  })
+
+  const match = await analyzeJobMatch(jobDescription || '', null, null, normalized)
+  return {
+    tailoredResume: base,
+    matchScore: match.matchScore,
+    missingSkills: match.missingSkills,
+    matchedSkills: match.matchedSkills,
+    suggestions: match.aiSuggestions,
+  }
+}
+
 // ──────────────── AI Resume Content Generation (for frontend) ────────────────
 export async function generateResumeContent(resumeData) {
-  const { personal, education, experience, skills, projects, certifications, template, jobDescription } = resumeData
+  const { personal, education, experience, skills, projects, certifications, achievements, template, jobDescription } = resumeData
 
   const prompt = `You are a world-class resume writer. Generate a complete, polished resume content.
 
@@ -471,6 +541,7 @@ Experience: ${JSON.stringify(experience || [])}
 Skills: ${JSON.stringify(skills || {})}
 Projects: ${JSON.stringify(projects || [])}
 Certifications: ${JSON.stringify(certifications || [])}
+Achievements: ${JSON.stringify(achievements || [])}
 Template Style: ${template || 'modern-pro'}
 ${jobDescription ? `Target Job Description: ${jobDescription}` : ''}
 
@@ -487,7 +558,8 @@ Generate a complete resume with these sections. Return as JSON:
   "education": [{"degree":"","institution":"","year":"","gpa":""}],
   "skills": {"technical":[""],"tools":[""],"soft":[""]},
   "certifications": [{"title":"","issuer":"","year":"","credentialId":""}],
-  "projects": [{"title":"","description":"","technologies":[""],"link":""}]
+  "projects": [{"title":"","description":"","technologies":[""],"link":""}],
+  "achievements": [{"title":"","description":"","impact":""}]
 }
 
 Make it ATS-optimized, use strong action verbs, include measurable achievements. Return ONLY valid JSON.`
@@ -513,6 +585,7 @@ Make it ATS-optimized, use strong action verbs, include measurable achievements.
     skills: skills || { technical: [], tools: [], soft: [] },
     projects: projects || [],
     certifications: certifications || [],
+    achievements: achievements || [],
   }
 }
 

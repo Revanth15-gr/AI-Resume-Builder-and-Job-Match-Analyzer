@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useAuth } from '../context/AuthContext'
 import {
   FileText, Briefcase, Target, Zap, Download, BarChart3,
   CheckCircle, ArrowRight, Star, Users, TrendingUp, Shield,
@@ -17,7 +18,7 @@ const slideshowImages = [
 ]
 
 // ─── Nav Component ─────────────────────────────────────────────────────────────
-function Navbar() {
+function Navbar({ authTarget }) {
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -65,10 +66,10 @@ function Navbar() {
 
           {/* CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <Link to="/auth" className="btn-secondary text-sm py-2 px-4">
+            <Link to={authTarget} className="btn-secondary text-sm py-2 px-4">
               Sign In
             </Link>
-            <Link to="/auth" className="btn-primary text-sm py-2 px-4">
+            <Link to={authTarget} className="btn-primary text-sm py-2 px-4">
               Get Started Free
             </Link>
           </div>
@@ -102,8 +103,8 @@ function Navbar() {
                 </a>
               ))}
               <div className="flex flex-col gap-2 mt-4">
-                <Link to="/auth" className="btn-secondary text-sm justify-center">Sign In</Link>
-                <Link to="/auth" className="btn-primary text-sm justify-center">Get Started Free</Link>
+                <Link to={authTarget} className="btn-secondary text-sm justify-center">Sign In</Link>
+                <Link to={authTarget} className="btn-primary text-sm justify-center">Get Started Free</Link>
               </div>
             </motion.div>
           )}
@@ -114,7 +115,7 @@ function Navbar() {
 }
 
 // ─── Hero Section ──────────────────────────────────────────────────────────────
-function HeroSection() {
+function HeroSection({ authTarget }) {
   const [currentSlide, setCurrentSlide] = useState(0)
 
   useEffect(() => {
@@ -212,7 +213,7 @@ function HeroSection() {
               transition={{ delay: 0.65 }}
               className="flex flex-col sm:flex-row gap-4 mb-12"
             >
-              <Link to="/auth" className="btn-primary text-base px-8 py-4">
+              <Link to={authTarget} className="btn-primary text-base px-8 py-4">
                 <Sparkles className="w-5 h-5" />
                 Get Started Free
                 <ArrowRight className="w-5 h-5" />
@@ -673,7 +674,7 @@ function TestimonialsSection() {
 }
 
 // ─── CTA Section ───────────────────────────────────────────────────────────────
-function CTASection() {
+function CTASection({ authTarget }) {
   return (
     <section className="section-pad bg-section-alt">
       <div className="container-max">
@@ -695,7 +696,7 @@ function CTASection() {
             Join 50,000+ professionals who use ResumeAI daily. Free to start, no credit card required.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/auth" className="btn-primary text-base px-8 py-4">
+            <Link to={authTarget} className="btn-primary text-base px-8 py-4">
               <Sparkles className="w-5 h-5" />
               Start Building Free
             </Link>
@@ -762,16 +763,19 @@ function Footer() {
 
 // ─── Landing Page ──────────────────────────────────────────────────────────────
 export default function LandingPage() {
+  const { user } = useAuth()
+  const authTarget = user ? '/dashboard' : '/auth'
+
   return (
     <div className="min-h-screen">
-      <Navbar />
-      <HeroSection />
+      <Navbar authTarget={authTarget} />
+      <HeroSection authTarget={authTarget} />
       <StatsBar />
       <FeaturesSection />
       <HowItWorksSection />
       <BenefitsSection />
       <TestimonialsSection />
-      <CTASection />
+      <CTASection authTarget={authTarget} />
       <Footer />
     </div>
   )

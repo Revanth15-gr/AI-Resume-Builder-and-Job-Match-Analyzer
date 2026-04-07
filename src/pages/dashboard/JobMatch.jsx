@@ -148,27 +148,38 @@ export default function JobMatch() {
     setApplying(true)
     setError('')
     try {
-      const generatedResponse = await api.generateResumeAI({
-        personal: resumePayload.personal,
-        education: resumePayload.education,
-        experience: resumePayload.experience,
-        skills: resumePayload.skills,
-        template: latestResume?.template || 'modern-pro',
-        jobDescription: jd,
-      })
-      const generated = generatedResponse?.generated || generatedResponse || {}
+      if (latestResume?._id && jd.trim()) {
+        await api.tailorResume(latestResume._id, jd)
+      } else {
+        const generatedResponse = await api.generateResumeAI({
+          personal: resumePayload.personal,
+          education: resumePayload.education,
+          experience: resumePayload.experience,
+          skills: resumePayload.skills,
+          projects: latestResume?.projects || [],
+          certifications: latestResume?.certifications || [],
+          achievements: latestResume?.achievements || [],
+          template: latestResume?.template || 'modern-pro',
+          jobDescription: jd,
+        })
+        const generated = generatedResponse?.generated || generatedResponse || {}
 
-      const optimized = {
-        personal: {
-          ...resumePayload.personal,
-          summary: generated?.summary || resumePayload.personal.summary,
-        },
-        education: generated?.education?.length ? generated.education : resumePayload.education,
-        experience: generated?.experience?.length ? generated.experience : resumePayload.experience,
-        skills: generated?.skills || resumePayload.skills,
+        const optimized = {
+          personal: {
+            ...resumePayload.personal,
+            summary: generated?.summary || resumePayload.personal.summary,
+          },
+          education: generated?.education?.length ? generated.education : resumePayload.education,
+          experience: generated?.experience?.length ? generated.experience : resumePayload.experience,
+          skills: generated?.skills || resumePayload.skills,
+          projects: generated?.projects?.length ? generated.projects : latestResume?.projects || [],
+          certifications: generated?.certifications?.length ? generated.certifications : latestResume?.certifications || [],
+          achievements: generated?.achievements?.length ? generated.achievements : latestResume?.achievements || [],
+        }
+
+        await saveResume(optimized)
       }
 
-      await saveResume(optimized)
       setResult(prev => prev ? {
         ...prev,
         suggestions: ['Resume optimized from your profile and job description.', ...(prev.suggestions || [])],
