@@ -79,11 +79,11 @@ router.post('/register', async (req, res) => {
       success: true,
       message: verificationResult.emailSent
         ? 'Account created. Check your inbox to verify your email.'
-        : 'Account created. We could not send the email right now, so use the fallback verification link shown below.',
+        : 'Account created. We could not send the email right now. Use the fallback verification link in this response.',
       emailSent: verificationResult.emailSent,
       ...(verificationResult.error ? { emailError: verificationResult.error } : {}),
-      ...(env.NODE_ENV !== 'production' && !verificationResult.emailSent
-        ? { devVerificationLink: verificationResult.verificationLink }
+      ...(!verificationResult.emailSent
+        ? { fallbackVerificationLink: verificationResult.verificationLink }
         : {}),
     })
   } catch (err) {
@@ -185,11 +185,11 @@ router.post('/resend-verification', async (req, res) => {
       success: true,
       message: verificationResult.emailSent
         ? 'Verification email sent'
-        : 'We could not send the email right now, so use the fallback verification link shown below.',
+        : 'We could not send the email right now. Use the fallback verification link in this response.',
       emailSent: verificationResult.emailSent,
       ...(verificationResult.error ? { emailError: verificationResult.error } : {}),
-      ...(env.NODE_ENV !== 'production' && !verificationResult.emailSent
-        ? { devVerificationLink: verificationResult.verificationLink }
+      ...(!verificationResult.emailSent
+        ? { fallbackVerificationLink: verificationResult.verificationLink }
         : {}),
     })
   } catch (err) {

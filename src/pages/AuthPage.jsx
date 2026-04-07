@@ -68,8 +68,9 @@ export default function AuthPage() {
         const data = await register(form.name, form.email, form.password)
         setPendingVerificationEmail(form.email)
         setMessage(data.message || 'Account created. Please verify your email before sign in.')
-        if (data.devVerificationLink) {
-          setMessage((msg) => `${msg} Dev link: ${data.devVerificationLink}`)
+        const fallbackLink = data.fallbackVerificationLink || data.devVerificationLink
+        if (fallbackLink) {
+          setMessage((msg) => `${msg} Verification link: ${fallbackLink}`)
         }
         setMode('login')
         setForm((prev) => ({ ...prev, password: '' }))
@@ -113,8 +114,9 @@ export default function AuthPage() {
     try {
       const data = await resendVerification(pendingVerificationEmail)
       setMessage(data.message || 'Verification email sent')
-      if (data.devVerificationLink) {
-        setMessage((msg) => `${msg} Dev link: ${data.devVerificationLink}`)
+      const fallbackLink = data.fallbackVerificationLink || data.devVerificationLink
+      if (fallbackLink) {
+        setMessage((msg) => `${msg} Verification link: ${fallbackLink}`)
       }
     } catch (err) {
       setError(err.message || 'Failed to resend verification email')
