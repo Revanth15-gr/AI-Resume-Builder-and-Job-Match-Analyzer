@@ -40,7 +40,11 @@ const sendVerification = async (user) => {
     verificationLink,
   })
 
-  return { verificationLink, emailSent: emailResult.sent }
+  return {
+    verificationLink,
+    emailSent: emailResult.sent,
+    ...(emailResult.error ? { error: emailResult.error } : {}),
+  }
 }
 
 router.use((req, res, next) => {
