@@ -1,4 +1,7 @@
-const API_ROOT = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '')
+const rawApiRoot = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || ''
+const API_ROOT = rawApiRoot
+  .replace(/\/$/, '')
+  .replace(/\/api$/, '')
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || '/api'
 
 class ApiClient {
